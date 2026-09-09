@@ -2,6 +2,11 @@
 
 Feature titles only, grouped for readability — none of these are scoped or estimated yet. See `PLAN.md` for the architecture these would sit on top of.
 
+## Near-term priorities
+
+- [ ] Square grid support, alongside hex — the `grid` schema (PLAN.md §6) is already designed for this
+- [ ] Pluggable content-source backends — Obsidian is the first, not the only, implementation (PLAN.md §6a)
+
 ## Navigation & structure
 
 - [ ] Map stitching — link maps to each other at shared borders
