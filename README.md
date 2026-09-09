@@ -42,6 +42,6 @@ Take a look at `examples/demo` to show how it works at present.
 
 ## License
 
-[MIT](LICENSE). One dependency, `react-leaflet`, ships under the
-Hippocratic License 2.1 instead — not a conflict for MIT, but its own
-notice needs to travel along if you redistribute a build.
+[MIT](LICENSE).
+
+We recognise and support `react-leaflet`'s use of Hippocratic License 2.1
