@@ -6,13 +6,13 @@ Status: pre-implementation. Nothing here is built yet — this is the plan to re
 
 Today, the map tool lives inside `illuminated-world/site/maps/` as a generic Leaflet app (vanilla JS, no framework) that reads a `data.json` compiled at build time from an Obsidian vault, plus `map-server.py`, a dev-only Python server that adds a Ctrl+click location editor for local authoring. There's no persistent "editor" — authoring happens in Obsidian, and `map-server.py` (dev mode) is a thin local preview with one write-back path (editing marker position).
 
-Pulling this out standalone is really pulling apart three things that currently overlap:
+Pulling this out standalone is really pulling apart two things that currently overlap, plus a third that doesn't exist yet and isn't in scope for v1:
 
-1. **Authoring** — a GM placing/editing locations, calibrating the hex grid, drawing on a map. Currently: Obsidian + dev mode.
-2. **Publishing** — a read-only embed inside the wiki, for players/GM browsing lore between sessions. Currently: the built `data.json` + the same Leaflet app with editing stripped out.
-3. **Live play** — a GM running a session, a Presentation view on a second monitor reacting to GM commands in real time (fog of war, pings, map switches). Doesn't exist yet — this is the new thing.
+1. **Authoring** — a GM placing/editing locations, calibrating the grid, drawing on a map. Currently: Obsidian + dev mode. **v1.**
+2. **Publishing** — a read-only embed inside the wiki, for players/GM browsing lore between sessions. Currently: the built `data.json` + the same Leaflet app with editing stripped out. **v1.**
+3. **Live play** — a GM running a session, a Presentation view on a second monitor reacting to GM commands in real time (fog of war, pings, map switches). **Not in v1** (§9) — roadmap only, kept in mind below so v1's core isn't built in a way that forecloses it.
 
-The plan below treats these as three *surfaces* sharing one *core* (rendering, data model, marker/hex logic), not three separate apps built from scratch three times.
+The plan below treats these as *surfaces* sharing one *core* (rendering, data model, marker/grid logic) — v1 only builds the first two, but §2's `map-core` package is shaped so the third slots in later without a rewrite.
 
 ## 2. Proposed shape
 
@@ -22,26 +22,26 @@ A pnpm workspace monorepo:
 hex-enductor/
   apps/
     editor/              GM authoring app — Vite + React + TS
-    presentation/         read-only player display — Vite + React + TS, much smaller
-    server/               realtime + file I/O — TS, Hono
+    server/               file I/O for v1 — TS, Hono. Realtime (§7) joins this later, not v1.
+    # presentation/        not v1 — see §1, §9. Same map-core, added later.
   packages/
     hexen-schema/         Zod schemas for the .hexen.yml format (§6) — the single source of truth types are derived from
     content-resolver/      the generic "resolve a location's content" interface — see §6a
     content-obsidian/       the first (only, for now) implementation of it — reads frontmatter+body from a vault path
-    map-core/              <MapCanvas> component, grid math (hex + square), marker rendering — used by editor, presentation, AND the wiki embed
-    ui/                     shared form controls / panel chrome, optional — only worth it once editor and presentation both need it
+    map-core/              <MapCanvas> component, grid math (hex + square), marker rendering — used by editor AND the wiki embed today, presentation later
+    ui/                     shared form controls / panel chrome, optional — only worth it once more than one app needs it
   docs/
     PLAN.md               this file
     ROADMAP.md
 ```
 
-`map-core` is the piece that makes "three surfaces, one core" real: it's a dumb, mode-agnostic renderer (image + grid overlay + markers + popups) that takes a `readOnly` / `interactive` flag and an optional `liveState` (fog, pings) prop. The wiki embed becomes: import `map-core`, render it `readOnly`, no server, no websocket — same component the editor uses in edit mode, same component the presentation view uses with a websocket feed on top.
+`map-core` is the piece that makes "shared surfaces" real: it's a dumb, mode-agnostic renderer (image + grid overlay + markers + popups) that takes a `readOnly` / `interactive` flag and an optional `liveState` (fog, pings) prop it simply ignores until a Presentation view exists to pass one. The wiki embed becomes: import `map-core`, render it `readOnly`, no server, no websocket — same component the editor uses in edit mode.
 
 `content-resolver` / `content-obsidian` is the other half of "built as a plugin from day one," per your instinct about decoupling Obsidian rendering — see §6a for why this is its own package rather than a function inside `hexen-schema`.
 
 ## 3. Framework choice: not Next.js
 
-You asked me to actually weigh this rather than default to it, so: I'd recommend **Vite + React + TypeScript** (a plain SPA) for both `editor` and `presentation`, not Next.js.
+You asked me to actually weigh this rather than default to it, so: I'd recommend **Vite + React + TypeScript** (a plain SPA) for `editor` (and for `presentation`, whenever that's built), not Next.js.
 
 Next.js earns its complexity when you need SSR/SSG for content pages, file-based routing across many pages, or SEO. None of that applies here — this is an interactive canvas tool with effectively one screen per app, used by you, not indexed by anyone. Next.js's App Router also blurs client/server component boundaries in a way that adds real mental overhead for a canvas-heavy, client-state-heavy app, for no corresponding benefit. A Vite SPA gives you a faster dev loop, a simpler mental model, and a trivial build output (static files) you can serve however you like.
 
@@ -59,7 +59,7 @@ Briefly, on staying in React vs. not: canvas/pan-zoom apps with lots of small po
 
 ## 5. GM vs. Player roles
 
-Worth being explicit about this now since it shapes the server's auth model, not just the UI:
+There's no Presentation view in this first iteration (§9) and no auth in v1, so nothing here is being built yet — this is a model for *when* that roadmap item is picked up, kept here so the eventual design starts from a real role split instead of retrofitting one onto a GM-only tool after the fact:
 
 | | GM (editor + presentation controller) | Player (presentation view) |
 |---|---|---|
@@ -139,7 +139,7 @@ You flagged wanting to decouple Obsidian rendering into a plugin later, and poin
 
 **Hono** — TypeScript-native, minimal, runs on Node or Bun without changes, and pairs cleanly with **tRPC** for the editor↔server API (save/load a location, list a project's locations) so you get end-to-end type inference from `hexen-schema` with no separate REST layer to keep in sync by hand. Fastify is the mature alternative if tRPC's magic ever feels like too much; I'd start with Hono+tRPC and only reach for Fastify if you hit something Hono genuinely can't do.
 
-Realtime (GM → Presentation commands): plain `ws`, or Hono's own WebSocket helper. Socket.IO is the other option if you want rooms/reconnection handling out of the box — reasonable trade of a heavier dependency for less code, worth it once "online play" (multiple GM sessions, roadmap) is real; overkill for one GM and one presentation window on the same LAN.
+Realtime (GM → Presentation commands) isn't needed for v1 at all — no Presentation view (§9). Noted here only so the choice is on record for whenever that roadmap item happens: plain `ws`, or Hono's own WebSocket helper, would cover a GM and a presentation window on the same LAN; Socket.IO's rooms/reconnection handling would only earn its weight if "online play" (multiple GM sessions, roadmap) becomes real.
 
 Runtime: **Bun for local dev, Node in production** — Bun's fast startup and built-in TS/WebSocket support are worth it for the day-to-day authoring loop, while Node stays the boring, reliable choice for whatever's actually running during a live session. Hono runs unchanged on either, which is most of why it's the pick here.
 
@@ -155,19 +155,25 @@ The single-file-plus-external-content design makes this lighter than the folder-
 
 Because content never duplicates — it's a reference, not a copy — there's no on-going sync problem to design around here at all. The vault stays the single source of truth for prose; `.hexen.yml` is the single source of truth for space. The only one-way transformation is stripping the now-redundant `map-*` frontmatter, which only needs to happen once.
 
-## 9. Decisions and open questions
-
-Resolved:
+## 9. Decisions
 
 - **No auth for v1** (local/LAN trust) — deliberate scope cut, revisit if "online play" ever becomes real.
 - **Bun for dev, Node for production.**
-- **`.hexen.yml` files are opened ad hoc**, like a document — `File > Open`, arbitrary path, a recent-files list — not managed in a dedicated directory with a project picker. `content.vaultRoot` and `image.file` both resolve relative to wherever that file happens to be.
-- **Map images live in a hex-enductor-owned `assets/` folder**, not the vault's `_maps/<id>/` folders — see the `image.file` note in §6. Migration (§8) will need to copy each map image once rather than reference it in place.
+- **`.hexen.yml` files are opened ad hoc**, like a document — `File > Open`, arbitrary path, a recent-files list — not managed in a dedicated directory with a project picker. `content.vaultRoot` and `image.file` both resolve relative to wherever that file happens to be (see §10 for how illuminated-world uses this).
+- **Map images resolve relative to the `.hexen.yml` file, not `vaultRoot`** — see the `image.file` note in §6. For illuminated-world specifically this ends up inside the vault anyway (§10), but that's a placement choice, not the format tying image storage to wherever Obsidian happens to be.
 - **Every `content` block carries an explicit `type`** — see the end of §6a.
 - **`links[].id` referential integrity is deliberately unspecified for now** — do whatever's least work at implementation time (almost certainly: skip/warn on a dangling link rather than fail the whole load, since Zod validates each location's own shape independently anyway and a cross-referencing check is a separate, second pass). Revisit if broken links become an actual authoring annoyance.
 - **A location can be linked from more than one parent map** — confirmed intentional, not just a side effect of the schema. No uniqueness constraint on `links[].id` across the file.
+- **The published wiki's map embed reads `.hexen.yml` directly** (§10) — no `data.json`-compatibility export step, transitional or otherwise.
+- **There is no Presentation view in this first iteration.** Dropped, not deferred — it had no bearing on anything else being decided here.
 
-Still open:
+No open questions left blocking a start.
 
-- Where does the published wiki's map embed get its data from once this exists — does Quartz's build read `.hexen.yml` directly (point `MapData`'s emitter at it), or does hex-enductor export a `data.json` compatible with what `MapData`/`app.js` already expect, as a transitional step?
-- Single-map-per-session assumption: does the Presentation view need to hold state for multiple concurrently-open maps (for map-stitching / sub-map click-through), or is "one active map, replaced on GM command" sufficient for v1?
+## 10. Integrating with the illuminated-world Quartz build
+
+`illuminated-world.hexen.yml` and its `_assets/` folder live at `site/vault/` root, alongside `Locations/`, `Quests/`, etc. — not in a separate location, and not exported into a translated format. This works cleanly, for reasons worth spelling out:
+
+- **Quartz never mistakes either for content.** Its build only turns `.md` files into pages; a `.yml` file and a folder of PNGs at vault root simply never enter that pipeline, regardless of `ignorePatterns`.
+- **`_assets/`, not `assets/`.** The underscore isn't new — it's the existing convention (`_maps/` today, and `_assets/` already exists in the vault for `torch.gif`), and the Explorer's `filterFn` already excludes any path segment starting with `_`, recursively. Naming it `_assets/` gets it hidden from the sidebar for free, no code change. This is a placement choice specific to *this* deployment — the format itself doesn't require `.hexen.yml` to live inside a vault at all (§9: it's opened ad hoc, from anywhere) — it's illuminated-world specifically choosing to co-locate them so Quartz can read the file directly with no translation layer. `image.file` still resolves relative to the `.hexen.yml` file itself, not to `vaultRoot` (§6) — that principle is unchanged; it's just that here, the two happen to be the same directory.
+- **A new Quartz plugin reads `.hexen.yml` directly**, replacing today's `MapData` emitter: same technique `questTracker.ts` already uses to read arbitrary vault files outside the current page being processed (raw `fs` + a parser, keyed off `ctx.argv.directory`), just parsing YAML instead of frontmatter. It still writes the same `public/maps/<id>/data.json` shape `app.js` already fetches — the output contract doesn't change, only where the input comes from. `app.js` needs no changes for this cut. (When square grids actually land, `data.json`'s `hexGrid` field would need to generalize to `grid` — not needed yet, since this vault is hex-only today.)
+- **No backreference frontmatter needed on location `.md` files.** The instinct that one might be needed was right — `MapLink.tsx` ("View on map →") needs to know, for the page currently rendering, which map it's on, and that used to come from that page's own `map`/`map-x`/`map-y` frontmatter, which no longer exists. But since `content.ref` values in `.hexen.yml` are vault-relative paths — the same shape Quartz already tracks per file internally — the new plugin can build a reverse index once (`content.ref` → the `links[]` entry pointing at it) and match it against each file's own path automatically, no round-trip through frontmatter required. Concretely: a small transformer stamps computed data (which map(s), and at what position) onto each matching page during the build, the same way `frontmatter.ts` itself stamps `file.data.frontmatter` — `MapLink.tsx` reads that instead of raw frontmatter. This is strictly better than a hand-maintained field: it can't drift out of sync with `.hexen.yml`, and since a location can be linked from more than one parent (§9), a location on two maps gets both automatically — `MapLink` can render two "View on map" links instead of assuming there's only ever one.
