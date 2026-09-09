@@ -3,6 +3,7 @@ import { MapCanvas } from "@hex-enductor/map-core";
 import { useAppStore } from "./store.ts";
 import { trpc, serverUrl } from "./trpc.ts";
 import { LinkForm } from "./LinkForm.tsx";
+import { getRecentProjects } from "./recentProjects.ts";
 import type { Link } from "@hex-enductor/hexen-schema";
 
 function dirname(path: string): string {
@@ -15,9 +16,53 @@ function imageUrl(projectPath: string, file: string): string {
   return `${serverUrl()}/image?dir=${encodeURIComponent(dir)}&file=${encodeURIComponent(file)}`;
 }
 
+function joinPath(dir: string, name: string): string {
+  return dir.endsWith("/") ? `${dir}${name}` : `${dir}/${name}`;
+}
+
+function DirectoryBrowser({ onOpen }: { onOpen: (path: string) => void }) {
+  const [browsePath, setBrowsePath] = useState<string | undefined>(undefined);
+  const listing = trpc.listDirectory.useQuery({ path: browsePath });
+
+  return (
+    <div className="browser">
+      {listing.isLoading && <p className="status">Loading…</p>}
+      {listing.isError && <p className="status error">{listing.error.message}</p>}
+      {listing.data && (
+        <>
+          <div className="browser-path">{listing.data.path}</div>
+          <ul className="browser-list">
+            {listing.data.parent !== null && (
+              <li>
+                <button onClick={() => setBrowsePath(listing.data!.parent!)}>.. (up)</button>
+              </li>
+            )}
+            {listing.data.entries.map((entry) => (
+              <li key={entry.name}>
+                <button
+                  onClick={() => {
+                    const full = joinPath(listing.data!.path, entry.name);
+                    if (entry.isDirectory) setBrowsePath(full);
+                    else onOpen(full);
+                  }}
+                >
+                  {entry.isDirectory ? `${entry.name}/` : entry.name}
+                </button>
+              </li>
+            ))}
+            {listing.data.entries.length === 0 && <li className="muted">Nothing to open here.</li>}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 function OpenProjectForm() {
   const [pathInput, setPathInput] = useState("");
+  const [browsing, setBrowsing] = useState(false);
   const openProject = useAppStore((s) => s.openProject);
+  const [recent] = useState(() => getRecentProjects());
 
   return (
     <div className="open-project">
@@ -38,6 +83,26 @@ function OpenProjectForm() {
         />
         <button type="submit">Open</button>
       </form>
+
+      <button className="link-button" onClick={() => setBrowsing((b) => !b)}>
+        {browsing ? "Hide browser" : "Browse for a project…"}
+      </button>
+      {browsing && <DirectoryBrowser onOpen={openProject} />}
+
+      {recent.length > 0 && (
+        <div className="recent-projects">
+          <h3>Recent</h3>
+          <ul>
+            {recent.map((path) => (
+              <li key={path}>
+                <button className="link-button" onClick={() => openProject(path)}>
+                  {path}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

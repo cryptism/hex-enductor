@@ -2,12 +2,17 @@ import { z } from "zod";
 import { LinkSchema } from "@hex-enductor/hexen-schema";
 import { router, publicProcedure } from "./trpc.ts";
 import { openProject, saveProject } from "./projectIO.ts";
+import { listDirectory } from "./browse.ts";
 
 const LinkPatchSchema = LinkSchema.partial();
 
 export const appRouter = router({
   openProject: publicProcedure.input(z.object({ path: z.string() })).query(({ input }) => {
     return openProject(input.path);
+  }),
+
+  listDirectory: publicProcedure.input(z.object({ path: z.string().optional() })).query(({ input }) => {
+    return listDirectory(input.path);
   }),
 
   saveLink: publicProcedure
