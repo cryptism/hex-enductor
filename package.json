@@ -8,11 +8,18 @@
   "scripts": {
     "dev:server": "bun --cwd apps/server run dev",
     "dev:editor": "bun --cwd apps/editor run dev",
-    "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun run --filter '*' test",
-    "schema:docs": "bun --cwd packages/hexen-schema run docs"
+    "typecheck": "bun run --filter '*' typecheck && tsc --noEmit",
+    "test": "bun run --filter '*' test && bun test scripts",
+    "schema:docs": "bun --cwd packages/hexen-schema run docs",
+    "migrate:obsidian": "bun run scripts/import-obsidian-vault.ts"
+  },
+  "dependencies": {
+    "@hex-enductor/hexen-schema": "workspace:*",
+    "gray-matter": "^4.0.3"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
   }
 }
