@@ -3,9 +3,9 @@ _Spare a little greed!_
 
 [![Have *you* been to the English deer park?](https://img.youtube.com/vi/pcEajscsyQ0/0.jpg)](https://www.youtube.com/watch?v=pcEajscsyQ0)
 
-Hex Enductor is a Leaflet-based GM map annotation and presentation tool.
+Hex Enductor is a Leaflet-based TTRPG, annotation and presentation tool for GMs. It intends to support live, in-person play and supports on-the-fly editing of the mapped environment that syncs to pluggable content.
 
-WIP, alpha, and very very overly suited to mine own ends. Feel free to swing by with features, bugs, all that whatnot.
+WIP, alpha, and very very overly suited to mine own ends. Feel free to swing by with features, bugs, all that whatnot, hopefully what's been done here is worthy to someone, even in our most decrepit futures to which we look forward in horror, more often than occasional, at the sight of our own ghosts gouged out of us and playing silly buggers among themselves.
 
 ## Getting started
 
