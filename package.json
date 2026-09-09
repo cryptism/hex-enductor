@@ -11,7 +11,8 @@
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit",
     "test": "bun run --filter '*' test && bun test scripts",
     "schema:docs": "bun --cwd packages/hexen-schema run docs",
-    "migrate:obsidian": "bun run scripts/import-obsidian-vault.ts"
+    "migrate:obsidian": "bun run scripts/import-obsidian-vault.ts",
+    "migrate:obsidian:strip": "bun run scripts/strip-obsidian-frontmatter.ts"
   },
   "dependencies": {
     "@hex-enductor/hexen-schema": "workspace:*",

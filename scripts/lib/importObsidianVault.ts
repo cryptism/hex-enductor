@@ -56,6 +56,32 @@ function isPin(fm: Record<string, unknown>): boolean {
 }
 
 /**
+ * Every frontmatter key buildHexenProject reads off a map-root note.
+ * Exported so stripFrontmatterFields.ts can remove exactly what got
+ * migrated into .hexen.yml — no more, no less — rather than guessing
+ * at a pattern.
+ */
+export const MAP_ROOT_FIELDS = [
+  "map-root",
+  "map-id",
+  "map-hex-origin-x",
+  "map-hex-origin-y",
+  "map-hex-b1-x",
+  "map-hex-b1-y",
+  "map-hex-b2-x",
+  "map-hex-b2-y",
+  "map-hex-km-per-hex",
+  "map-hex-color",
+  "map-hex-weight",
+  "map-hex-opacity",
+  "map-img",
+  "map-base",
+] as const;
+
+/** Every frontmatter key buildHexenProject reads off a pinned location note. */
+export const PIN_FIELDS = ["map", "map-x", "map-y", "map-type", "map-icon", "map-color"] as const;
+
+/**
  * Pure: takes already-parsed frontmatter (see readVaultEntries.ts for
  * the disk-reading half) and each map's already-resolved image, and
  * builds the Location/Link graph — today's map-root note becomes a
