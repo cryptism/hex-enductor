@@ -40,3 +40,8 @@ Take a look at `examples/demo` to show how it works at present.
 | `apps/server` | Opens a .hexen.yml file. map images and other content from the project directory. |
 | `apps/editor` | The GM-facing app — open a project, click a pin, edit it, save. |
 
+## License
+
+[MIT](LICENSE). One dependency, `react-leaflet`, ships under the
+Hippocratic License 2.1 instead — not a conflict for MIT, but its own
+notice needs to travel along if you redistribute a build.
