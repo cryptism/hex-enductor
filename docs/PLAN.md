@@ -95,8 +95,9 @@ locations:
       b2: { x: 42.41, y: 73.49 }
       distancePerCell: 9
       style: { color: "#c19a5f", weight: 1, opacity: 0.45 }
-    image: { file: assets/vilheim-crace.png, width: 3840, height: 2160 }
+    image: { file: assets/vilheim-crace.png, width: 3840, height: 2160 }   # resolves relative to this .hexen.yml file, not vaultRoot
     content:
+      type: obsidian
       ref: "Locations/The Most Glorious Exarchates of Vilheim & Crace.md"
     links:
       - id: pentegil-manor
@@ -111,6 +112,7 @@ locations:
     grid: null            # no map of its own (yet) — just a pin on vilheim-crace
     image: null
     content:
+      type: obsidian
       ref: "Locations/Pentegil Manor.md"
     links: []
 ```
@@ -120,6 +122,7 @@ Walking through the deliberate choices in there:
 - **`grid`** generalizes today's `map-hex-*` frontmatter, and is a discriminated union on `type` so square grids (your stated near-term priority) are a second case, not a rewrite: `type: square` would carry `origin` + `cellSize: { x, y }` instead of `b1`/`b2`, plus the same `style`. I renamed `kmPerHex` to `distancePerCell` so one field name works for both — nothing depends on the old name yet, so now's the moment to fix it. `grid: null` means "this location isn't itself a map."
 - **`links`** is today's `map-x`/`map-y`/`map-type`/`map-icon`/`map-color` frontmatter, moved off the *referenced* location and onto the *referencing* one. That's the crucial shift: position is a property of the relationship between two locations (*where does Pentegil Manor sit on Vilheim & Crace's map*), not a property of Pentegil Manor itself — which is what makes a location nameable and positioned differently on two different parent maps if that ever comes up, and what makes map-stitching (roadmap) and click-through-to-submap (roadmap) both just "another entry in `links[]` pointing at a location with a `grid`," no separate mechanism needed.
 - **`content.ref`** is the pointer into the Obsidian vault, resolved at load time — title, summary, and body all come from the referenced markdown file's frontmatter/content, not from `.hexen.yml`. A location's `links[]` entries never carry a title or summary for that reason; they're pure positioning + display (icon/color/type/hidden), and the name gets looked up through `id → locations[].content.ref → frontmatter.title` when something needs to render it.
+- **`image.file`**, unlike `content.ref`, resolves relative to the `.hexen.yml` file's own directory, not `vaultRoot` — map images live in a hex-enductor-owned `assets/` folder rather than the vault's existing `_maps/<id>/` folders. That's one copy of each image to carry over during migration rather than zero, but it keeps image storage decoupled from "wherever the Obsidian vault happens to be," consistent with treating Obsidian as a swappable content plugin rather than a filesystem dependency baked into the format.
 - **Fog of war and other session state stay out of this file entirely** — a sibling file (`illuminated-world.hexen.state.json`, say), not a field on a location. `.hexen.yml` is authored content you hand-edit and want clean git diffs on; fog changes every session and would turn that history into noise. Same reasoning will apply to player/monster counters and anything else session-scoped later.
 
 ### 6a. `content` as a plugin point, not a special case
@@ -130,7 +133,7 @@ You flagged wanting to decouple Obsidian rendering into a plugin later, and poin
 - `packages/content-obsidian` is the only implementation right now: it takes `{ vaultRoot }`, and for a given location's `content.ref`, reads that file relative to `vaultRoot` and parses YAML frontmatter (`title`, `summary`) + Markdown body — exactly what Quartz's own frontmatter parsing already does, independently reimplemented here rather than shared, since taking a runtime dependency on the Quartz toolchain for this would be the wrong direction of coupling.
 - The server picks which resolver to use from the project's `content.type` (today, always `"obsidian"`) — a second backend later (inline content stored directly in `.hexen.yml`, say, or a different note-taking tool) is a second package implementing the same interface, not a fork of the format.
 
-I left the per-location `content` block minimal (`{ ref: "..." }`, no `type` of its own) since a project only declares one active content source at the top level — see question 4 at the end of this doc, though; I'm not fully sure that's the shape you want.
+**Decided: every `content` block, top-level and per-location, carries its own `type`.** This matches the convention `grid` already uses (`type: hex | square`), so there's one pattern in the format for "this object is one of several kinds," not two. It costs a repeated `type: obsidian` on every location, but it means a location's `content` block is self-describing in isolation — decodable by a Zod `z.discriminatedUnion("type", [...])` without consulting the rest of the file, which is also just a better error message when it's wrong (`content.type` at this location isn't a recognized value, vs. a confusing failure two levels up when the resolver can't figure out what shape to expect).
 
 ## 7. Server
 
@@ -147,21 +150,24 @@ The single-file-plus-external-content design makes this lighter than the folder-
 1. Write a one-time **importer script** (Node/TS, lives in this repo, not thrown away after use): for each `map-root: true` note under `site/vault/Locations/`, emit a `locations[]` entry with its `grid` (from `map-hex-*` frontmatter) and `image`. For every other note with `map`/`map-x`/`map-y` frontmatter, emit a `locations[]` entry (`content.ref` pointing at that note, unchanged) **and** a `links[]` entry on its parent map carrying the position/icon/color/type that used to live in that note's own frontmatter.
 2. The importer then **rewrites those notes' frontmatter** to drop the now-migrated `map`/`map-x`/`map-y`/`map-type`/`map-icon`/`map-color` fields (they live in `.hexen.yml` now) — but leaves `title`, `summary`, `tags`, and the body completely alone. This is the one genuinely destructive step; review it by hand before committing.
 3. Drop `.base` files entirely — replaced by hex-enductor's own browse/search (roadmap).
-4. Point `content.vaultRoot` at wherever `illuminated-world/site/vault` ends up living relative to the `.hexen.yml` file, run it once, review the diff (small vault, very doable), commit.
+4. Copy each map's base image (today's `vault/_maps/<id>/map.png`) into this project's own `assets/` folder, and point each location's `image.file` at the copy — images don't stay referenced in the vault (§9).
+5. Point `content.vaultRoot` at wherever `illuminated-world/site/vault` ends up living relative to the `.hexen.yml` file, run it once, review the diff (small vault, very doable), commit.
 
 Because content never duplicates — it's a reference, not a copy — there's no on-going sync problem to design around here at all. The vault stays the single source of truth for prose; `.hexen.yml` is the single source of truth for space. The only one-way transformation is stripping the now-redundant `map-*` frontmatter, which only needs to happen once.
 
-## 9. Open questions to settle before writing code
+## 9. Decisions and open questions
+
+Resolved:
+
+- **No auth for v1** (local/LAN trust) — deliberate scope cut, revisit if "online play" ever becomes real.
+- **Bun for dev, Node for production.**
+- **`.hexen.yml` files are opened ad hoc**, like a document — `File > Open`, arbitrary path, a recent-files list — not managed in a dedicated directory with a project picker. `content.vaultRoot` and `image.file` both resolve relative to wherever that file happens to be.
+- **Map images live in a hex-enductor-owned `assets/` folder**, not the vault's `_maps/<id>/` folders — see the `image.file` note in §6. Migration (§8) will need to copy each map image once rather than reference it in place.
+- **Every `content` block carries an explicit `type`** — see the end of §6a.
+- **`links[].id` referential integrity is deliberately unspecified for now** — do whatever's least work at implementation time (almost certainly: skip/warn on a dangling link rather than fail the whole load, since Zod validates each location's own shape independently anyway and a cross-referencing check is a separate, second pass). Revisit if broken links become an actual authoring annoyance.
+- **A location can be linked from more than one parent map** — confirmed intentional, not just a side effect of the schema. No uniqueness constraint on `links[].id` across the file.
+
+Still open:
 
 - Where does the published wiki's map embed get its data from once this exists — does Quartz's build read `.hexen.yml` directly (point `MapData`'s emitter at it), or does hex-enductor export a `data.json` compatible with what `MapData`/`app.js` already expect, as a transitional step?
 - Single-map-per-session assumption: does the Presentation view need to hold state for multiple concurrently-open maps (for map-stitching / sub-map click-through), or is "one active map, replaced on GM command" sufficient for v1?
-- **Resolved**: no auth for v1 (local/LAN trust) — deliberate scope cut, revisit if "online play" ever becomes real.
-- **Resolved**: Bun for dev, Node for production.
-
-Raised by the `.hexen.yml` design itself, still open:
-
-- **Where do `.hexen.yml` project files live?** A dedicated directory hex-enductor manages (e.g. a `projects/` folder, with a picker in the UI), or opened ad hoc like a document (`File > Open`, arbitrary path, a recent-files list)? This decides whether there's a project-list screen at all, and it decides what "relative" means for `content.vaultRoot` — the assumption above is "relative to the `.hexen.yml` file's own directory," which only makes sense if that file has a stable, known location.
-- **Do map images live in the vault or in a hex-enductor-owned `assets/` folder?** `content.ref` resolves against the vault on purpose (that's where the prose lives). `image.file` could do the same — pointing at the existing `_maps/<id>/map.png` files and avoiding duplicating them — or hex-enductor could own its own assets folder, decoupled from the vault entirely. These aren't equivalent: the first keeps one copy of each map image but ties image storage to "wherever the Obsidian vault happens to be," which cuts against the stated goal of making Obsidian a swappable plugin.
-- **Does a location's `content` block need its own `type`?** (`content: { type: obsidian, ref: "..." }` vs. the minimal `content: { ref: "..." }` in the draft above, with the type implied by the project's single top-level `content.type`.) The minimal form is less to write and a project realistically has one active content source — but it means a location's content block is uninterpretable on its own, outside the context of the file it's embedded in.
-- **Referential integrity for `links[].id`**: if a link points at an `id` that isn't in `locations[]`, is that a hard load-time error, or does it render as a visibly-broken stub marker (closer to how a broken wikilink behaves today)?
-- **Can one location be linked from more than one parent map?** The DAG framing assumes yes — the same location could plausibly be reachable two ways once map-stitching exists. Worth confirming that's intended and not just a side effect of the schema, since it affects whether `links[].id` needs any uniqueness constraint.
