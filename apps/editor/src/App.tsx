@@ -22,7 +22,7 @@ function OpenProjectForm() {
   return (
     <div className="open-project">
       <h1>hex-enductor</h1>
-      <p>Open a .hexen.yml project — an absolute path, per docs/PLAN.md §9 (ad hoc, no project directory).</p>
+      <p>Open a .hexen.yml project by its absolute path.</p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -84,8 +84,7 @@ function App() {
 
   const selectedLink = currentLocation.links.find((l) => l.id === selectedLinkId);
   // A selected link's own target location, if it has a grid of its own
-  // — i.e. it's not just a pin, it's a map you can click into
-  // (docs/ROADMAP.md: click-through to sub-maps).
+  // — i.e. it's not just a pin, it's a map you can click into.
   const selectedTargetLocation = selectedLink
     ? project.locations.find((l) => l.id === selectedLink.id)
     : undefined;

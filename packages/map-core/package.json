@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@hex-enductor/hexen-schema": "workspace:*",
@@ -15,6 +16,7 @@
     "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.14",
     "@types/leaflet": "^1.9.14",
     "@types/react": "^19.2.7",
     "typescript": "^5.7.2"

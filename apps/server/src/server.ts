@@ -25,9 +25,9 @@ app.use(
   }),
 );
 
-// No auth for v1 (docs/PLAN.md §9 — local/LAN trust), but a file server
-// still shouldn't let a caller walk out of the project directory it
-// was handed, so resolve-and-check rather than joining blindly.
+// No auth for v1 (local/LAN trust), but a file server still shouldn't
+// let a caller walk out of the project directory it was handed — see
+// server.test.ts for the traversal case this guards against.
 app.get("/image", async (c) => {
   const projectDir = c.req.query("dir");
   const file = c.req.query("file");

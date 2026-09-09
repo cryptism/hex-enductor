@@ -1,0 +1,381 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "title": {
+      "type": "string"
+    },
+    "defaultLocation": {
+      "type": "string",
+      "description": "Which Location id opens by default."
+    },
+    "content": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "obsidian"
+            },
+            "vaultRoot": {
+              "type": "string",
+              "description": "Path to the Obsidian vault, resolved relative to the .hexen.yml file's own directory."
+            }
+          },
+          "required": [
+            "type",
+            "vaultRoot"
+          ],
+          "additionalProperties": false,
+          "description": "A project's content source: an Obsidian vault."
+        }
+      ],
+      "description": "Where a project's location content (title/summary/body) is resolved from."
+    },
+    "locations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "grid": {
+            "default": null,
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "hex"
+                      },
+                      "origin": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Pixel position of one hex's centre."
+                      },
+                      "b1": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Vector from origin to one neighbouring hex's centre."
+                      },
+                      "b2": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Vector from origin to a second neighbouring hex's centre, not parallel to b1."
+                      },
+                      "distancePerCell": {
+                        "description": "Real-world distance one hex represents (e.g. km), for ruler readouts.",
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "style": {
+                        "type": "object",
+                        "properties": {
+                          "color": {
+                            "type": "string",
+                            "description": "CSS color for the grid lines."
+                          },
+                          "weight": {
+                            "default": 1,
+                            "description": "Grid line stroke width, in pixels.",
+                            "type": "number"
+                          },
+                          "opacity": {
+                            "default": 0.45,
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          }
+                        },
+                        "required": [
+                          "color",
+                          "weight",
+                          "opacity"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Visual styling for a grid overlay's lines."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "origin",
+                      "b1",
+                      "b2",
+                      "style"
+                    ],
+                    "additionalProperties": false,
+                    "description": "A hex lattice calibrated by an origin plus two basis vectors — see packages/map-core/src/hexMath.ts for the math this feeds."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "square"
+                      },
+                      "origin": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Pixel position of one cell's top-left corner."
+                      },
+                      "cellSize": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Width and height of one grid cell, in pixels."
+                      },
+                      "distancePerCell": {
+                        "description": "Real-world distance one cell represents (e.g. km), for ruler readouts.",
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "style": {
+                        "type": "object",
+                        "properties": {
+                          "color": {
+                            "type": "string",
+                            "description": "CSS color for the grid lines."
+                          },
+                          "weight": {
+                            "default": 1,
+                            "description": "Grid line stroke width, in pixels.",
+                            "type": "number"
+                          },
+                          "opacity": {
+                            "default": 0.45,
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          }
+                        },
+                        "required": [
+                          "color",
+                          "weight",
+                          "opacity"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Visual styling for a grid overlay's lines."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "origin",
+                      "cellSize",
+                      "style"
+                    ],
+                    "additionalProperties": false,
+                    "description": "A square lattice."
+                  }
+                ],
+                "description": "How a Location's own map surface is calibrated, if it has one."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "image": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "description": "Path to the base map image, resolved relative to the .hexen.yml file's own directory (not content.vaultRoot) — image storage is decoupled from wherever the content plugin's root is."
+                  },
+                  "width": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "height": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "file",
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false,
+                "description": "A Location's own base map image, if it has one."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "default": null,
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "obsidian"
+                      },
+                      "ref": {
+                        "type": "string",
+                        "description": "Path to the markdown file, relative to the project's content.vaultRoot."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "ref"
+                    ],
+                    "additionalProperties": false,
+                    "description": "A single location's content: one file in the project's Obsidian vault."
+                  }
+                ],
+                "description": "A Location's title/summary/body always come from here, resolved at load time — never duplicated into .hexen.yml."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "links": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The Location this pin points at."
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "Marker type, e.g. settlement/ruin/landmark/hazard/waypoint."
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "color": {
+                  "default": null,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "hidden": {
+                  "default": false,
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "x",
+                "y",
+                "type",
+                "color",
+                "hidden"
+              ],
+              "additionalProperties": false,
+              "description": "A pin on a parent Location's map: position and display only, never a title or summary — those live on the referenced Location's own content. See parseHexenProject in ./index.ts for how a dangling id is handled."
+            }
+          }
+        },
+        "required": [
+          "id",
+          "grid",
+          "image",
+          "content",
+          "links"
+        ],
+        "additionalProperties": false,
+        "description": "The one node type in the format. A Location becomes a map you can click into purely by having a grid, and a pin on someone else's map purely by being the target of a Link elsewhere — both, either, or neither can be true of the same Location at once."
+      },
+      "description": "Every Location in the project, as a flat list."
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "title",
+    "defaultLocation",
+    "content",
+    "locations"
+  ],
+  "additionalProperties": false,
+  "description": "A .hexen.yml file: one project, one file."
+}

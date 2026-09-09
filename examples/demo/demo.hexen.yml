@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../docs/hexen.schema.json
 schemaVersion: 1
 title: Demo Realm
 defaultLocation: town

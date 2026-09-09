@@ -14,9 +14,10 @@ export interface ObsidianResolverConfig {
 /**
  * Reads title/summary/body straight out of the vault's own YAML
  * frontmatter + Markdown body — independently reimplemented rather
- * than sharing Quartz's frontmatter parser (docs/PLAN.md §6a: taking a
- * runtime dependency on the Quartz toolchain here would be the wrong
- * direction of coupling).
+ * than sharing Quartz's frontmatter parser, since taking a runtime
+ * dependency on the Quartz toolchain here would be the wrong direction
+ * of coupling. See index.test.ts for the fallback-title and
+ * wrong-content-type behavior.
  */
 export function createObsidianResolver(config: ObsidianResolverConfig): ContentResolver {
   const vaultDir = join(config.projectDir, config.vaultRoot);

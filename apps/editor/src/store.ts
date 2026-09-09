@@ -1,9 +1,7 @@
 import { create } from "zustand";
 
 // Client/UI state only — the project itself (locations, resolved
-// content) lives in react-query's cache via trpc.openProject, not
-// here (docs/PLAN.md §4: "server state ... paired with tRPC mostly
-// stops being a separate concern").
+// content) lives in react-query's cache via trpc.openProject, not here.
 interface AppState {
   projectPath: string | null;
   currentLocationId: string | null;

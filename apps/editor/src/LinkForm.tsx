@@ -5,8 +5,13 @@ import { z } from "zod";
 import type { Link } from "@hex-enductor/hexen-schema";
 
 const LinkFormSchema = z.object({
-  x: z.coerce.number(),
-  y: z.coerce.number(),
+  // Plain z.number(), not z.coerce.number(): register(..., { valueAsNumber:
+  // true }) below already converts the <input> string before validation
+  // runs, so the form's input and output types stay identical — coercing
+  // again here would just reintroduce the same mismatch RHF's own option
+  // exists to avoid.
+  x: z.number(),
+  y: z.number(),
   type: z.string().min(1, "required"),
   icon: z.string(),
   color: z.string(),
@@ -70,11 +75,11 @@ export function LinkForm({ link, title, onSave, saving }: LinkFormProps) {
 
       <label>
         X
-        <input type="number" step="any" {...register("x")} />
+        <input type="number" step="any" {...register("x", { valueAsNumber: true })} />
       </label>
       <label>
         Y
-        <input type="number" step="any" {...register("y")} />
+        <input type="number" step="any" {...register("y", { valueAsNumber: true })} />
       </label>
       <label>
         Type

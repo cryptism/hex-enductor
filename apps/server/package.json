@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --hot src/dev.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@hex-enductor/content-obsidian": "workspace:*",
@@ -14,7 +15,7 @@
     "@hono/trpc-server": "^0.4.2",
     "@trpc/server": "^11.18.0",
     "hono": "^4.6.14",
-    "zod": "^3.24.1"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",

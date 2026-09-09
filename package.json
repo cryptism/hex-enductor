@@ -8,7 +8,9 @@
   "scripts": {
     "dev:server": "bun --cwd apps/server run dev",
     "dev:editor": "bun --cwd apps/editor run dev",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '*' test",
+    "schema:docs": "bun --cwd packages/hexen-schema run docs"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

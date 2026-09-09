@@ -1,44 +1,58 @@
 import { z } from "zod";
 
-export const PointSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-});
+export const PointSchema = z
+  .object({
+    x: z.number(),
+    y: z.number(),
+  })
+  .describe("A pixel coordinate in the map image's own coordinate space.");
 export type Point = z.infer<typeof PointSchema>;
 
-export const GridStyleSchema = z.object({
-  color: z.string(),
-  weight: z.number().default(1),
-  opacity: z.number().min(0).max(1).default(0.45),
-});
+export const GridStyleSchema = z
+  .object({
+    color: z.string().describe("CSS color for the grid lines."),
+    weight: z.number().default(1).describe("Grid line stroke width, in pixels."),
+    opacity: z.number().min(0).max(1).default(0.45),
+  })
+  .describe("Visual styling for a grid overlay's lines.");
 export type GridStyle = z.infer<typeof GridStyleSchema>;
 
-// A hex grid is calibrated by an origin pixel plus two basis vectors
-// (b1, b2) spanning the lattice — b1/b2 point from one hex's centre to
-// two of its neighbours. See packages/map-core/src/hexMath.ts for the
-// math this calibration feeds (ported from the current
-// illuminated-world/site/maps/lib/app.js).
-export const HexGridSchema = z.object({
-  type: z.literal("hex"),
-  origin: PointSchema,
-  b1: PointSchema,
-  b2: PointSchema,
-  distancePerCell: z.number().positive().optional(),
-  style: GridStyleSchema,
-});
+export const HexGridSchema = z
+  .object({
+    type: z.literal("hex"),
+    origin: PointSchema.describe("Pixel position of one hex's centre."),
+    b1: PointSchema.describe("Vector from origin to one neighbouring hex's centre."),
+    b2: PointSchema.describe(
+      "Vector from origin to a second neighbouring hex's centre, not parallel to b1.",
+    ),
+    distancePerCell: z
+      .number()
+      .positive()
+      .optional()
+      .describe("Real-world distance one hex represents (e.g. km), for ruler readouts."),
+    style: GridStyleSchema,
+  })
+  .describe(
+    "A hex lattice calibrated by an origin plus two basis vectors — see packages/map-core/src/hexMath.ts for the math this feeds.",
+  );
 export type HexGrid = z.infer<typeof HexGridSchema>;
 
-// Square grids are docs/ROADMAP.md's near-term priority, not built yet
-// (packages/map-core has no renderer for this variant) — the shape
-// exists now so adding one later is additive, not a schema rewrite.
-export const SquareGridSchema = z.object({
-  type: z.literal("square"),
-  origin: PointSchema,
-  cellSize: PointSchema,
-  distancePerCell: z.number().positive().optional(),
-  style: GridStyleSchema,
-});
+export const SquareGridSchema = z
+  .object({
+    type: z.literal("square"),
+    origin: PointSchema.describe("Pixel position of one cell's top-left corner."),
+    cellSize: PointSchema.describe("Width and height of one grid cell, in pixels."),
+    distancePerCell: z
+      .number()
+      .positive()
+      .optional()
+      .describe("Real-world distance one cell represents (e.g. km), for ruler readouts."),
+    style: GridStyleSchema,
+  })
+  .describe("A square lattice.");
 export type SquareGrid = z.infer<typeof SquareGridSchema>;
 
-export const GridSchema = z.discriminatedUnion("type", [HexGridSchema, SquareGridSchema]);
+export const GridSchema = z
+  .discriminatedUnion("type", [HexGridSchema, SquareGridSchema])
+  .describe("How a Location's own map surface is calibrated, if it has one.");
 export type Grid = z.infer<typeof GridSchema>;

@@ -8,13 +8,7 @@ export * from "./project.ts";
 
 export interface ParsedHexenProject {
   project: HexenProject;
-  /**
-   * Non-fatal problems found after shape validation passed — dangling
-   * links, an unresolvable defaultLocation, duplicate ids. Deliberately
-   * warn-don't-fail (docs/PLAN.md §9): each Location's own shape is
-   * still valid Zod on its own, so one bad reference shouldn't sink the
-   * whole project.
-   */
+  /** Non-fatal cross-reference problems — see parseHexenProject.test.ts. */
   warnings: string[];
 }
 
@@ -26,8 +20,6 @@ export function parseHexenProject(yamlText: string): ParsedHexenProject {
 }
 
 export function serializeHexenProject(project: HexenProject): string {
-  // Re-validate on the way out too — a hand-built object (e.g. from a
-  // form) shouldn't be able to write invalid YAML to disk.
   const validated = HexenProjectSchema.parse(project);
   return stringifyYaml(validated);
 }

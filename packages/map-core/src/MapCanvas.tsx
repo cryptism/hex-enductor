@@ -12,11 +12,11 @@ export interface MapCanvasProps {
   imageUrl: string;
   grid: Grid | null;
   links: Link[];
-  /** link.id -> the referenced Location's resolved title (docs/PLAN.md §6: links never carry their own title). */
+  /** link.id -> the referenced Location's resolved title (a Link never carries its own title — see @hex-enductor/hexen-schema). */
   linkTitles: Record<string, string>;
   selectedLinkId?: string;
   onSelectLink?: (linkId: string) => void;
-  /** Presentation/wiki-embed mode (docs/PLAN.md §2) — no interaction, just the rendered map. Not exercised anywhere yet. */
+  /** Presentation/wiki-embed mode — no interaction, just the rendered map. Not exercised anywhere yet. */
   readOnly?: boolean;
 }
 
@@ -55,8 +55,9 @@ export function MapCanvas({
     >
       <ImageOverlay url={imageUrl} bounds={bounds} />
 
-      {/* Square grids (docs/ROADMAP.md near-term priority) aren't rendered yet —
-          hexPolygons is empty for grid.type === "square" until that lands. */}
+      {/* Square grids aren't rendered yet — hexPolygons is empty for
+          grid.type === "square" until that lands (see hexMath.test.ts
+          for what buildHexPolygons is actually verified to do). */}
       {hexPolygons.map((corners, i) => (
         <Polygon
           key={i}
