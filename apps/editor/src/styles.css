@@ -1,0 +1,172 @@
+:root {
+  color-scheme: dark;
+  --ground: #12150f;
+  --surface: #1e2418;
+  --border: #384631;
+  --ink: #e6e3c9;
+  --dim: #96998a;
+  --accent: #c19a5f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 260px 1fr 300px;
+  height: 100%;
+}
+
+.sidebar,
+.edit-panel {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.edit-panel {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+.map-area {
+  position: relative;
+}
+
+.status {
+  padding: 2rem;
+}
+
+.status.error {
+  color: #e2604a;
+}
+
+.open-project {
+  max-width: 32rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}
+
+.open-project form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.open-project input {
+  flex: 1;
+}
+
+input,
+button {
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0.25rem 0;
+  display: block;
+}
+
+.link-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+
+.link-list button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+}
+
+.link-list button:hover {
+  background: var(--ground);
+}
+
+.link-list button.selected {
+  background: var(--ground);
+  color: var(--accent);
+}
+
+.link-list .muted {
+  color: var(--dim);
+  font-size: 0.9em;
+  padding: 0.4rem 0.5rem;
+}
+
+.warnings {
+  color: #dcb47e;
+  font-size: 0.85em;
+  margin: 0.75rem 0;
+}
+
+.link-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.link-form-id {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8em;
+  color: var(--dim);
+  margin: -0.5rem 0 0.5rem;
+}
+
+.link-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.9em;
+}
+
+.link-form .checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field-error {
+  color: #e2604a;
+  font-size: 0.85em;
+}

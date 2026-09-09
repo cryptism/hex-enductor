@@ -1,0 +1,22 @@
+{
+  "name": "@hex-enductor/map-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hex-enductor/hexen-schema": "workspace:*",
+    "leaflet": "^1.9.4",
+    "react": "^19.2.8",
+    "react-leaflet": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.14",
+    "@types/react": "^19.2.7",
+    "typescript": "^5.7.2"
+  }
+}

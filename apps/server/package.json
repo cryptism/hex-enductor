@@ -1,0 +1,24 @@
+{
+  "name": "@hex-enductor/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/dev.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hex-enductor/content-obsidian": "workspace:*",
+    "@hex-enductor/content-resolver": "workspace:*",
+    "@hex-enductor/hexen-schema": "workspace:*",
+    "@hono/trpc-server": "^0.4.2",
+    "@trpc/server": "^11.18.0",
+    "hono": "^4.6.14",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

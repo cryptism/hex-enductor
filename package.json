@@ -1,0 +1,16 @@
+{
+  "name": "hex-enductor",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:server": "bun --cwd apps/server run dev",
+    "dev:editor": "bun --cwd apps/editor run dev",
+    "typecheck": "bun run --filter '*' typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

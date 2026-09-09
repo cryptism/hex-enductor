@@ -1,8 +1,8 @@
-# hex-enductor
+# Hex Enductor
+_Spare a little greed!_
 
-[![Have you been the English Deer Park?](https://img.youtube.com/vi/pcEajscsyQ0/0.jpg)](https://www.youtube.com/watch?v=pcEajscsyQ0)
+[![Have *you* been to the English deer park?](https://img.youtube.com/vi/pcEajscsyQ0/0.jpg)](https://www.youtube.com/watch?v=pcEajscsyQ0)
 
-A GM map annotation and presentation tool. Nothing here is built yet.
+Hex Enductor is a Leaflet-based GM map annotation and presentation tool.
 
-- [`docs/PLAN.md`](docs/PLAN.md) — architecture: framework choice, state/forms, the editor/presentation/wiki-embed split, the map package format, and the migration path off the current Obsidian vault.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — feature list, unscoped.
+WIP, alpha, and very very overly suited to mine own ends.

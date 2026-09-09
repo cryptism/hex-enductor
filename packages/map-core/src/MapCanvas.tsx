@@ -1,0 +1,116 @@
+import { useMemo } from "react";
+import { CRS, divIcon } from "leaflet";
+import { MapContainer, ImageOverlay, Polygon, Marker, Popup } from "react-leaflet";
+import type { Grid, ImageRef, Link } from "@hex-enductor/hexen-schema";
+import { loadHexBasis, buildHexPolygons } from "./hexMath.ts";
+import { pxToLatLng, polygonToLatLngs } from "./coords.ts";
+import "leaflet/dist/leaflet.css";
+
+export interface MapCanvasProps {
+  image: ImageRef;
+  /** Wherever the caller has made image.file reachable — a dev server route, a blob URL, whatever. */
+  imageUrl: string;
+  grid: Grid | null;
+  links: Link[];
+  /** link.id -> the referenced Location's resolved title (docs/PLAN.md §6: links never carry their own title). */
+  linkTitles: Record<string, string>;
+  selectedLinkId?: string;
+  onSelectLink?: (linkId: string) => void;
+  /** Presentation/wiki-embed mode (docs/PLAN.md §2) — no interaction, just the rendered map. Not exercised anywhere yet. */
+  readOnly?: boolean;
+}
+
+const DEFAULT_MARKER_COLOR = "#c19a5f";
+
+export function MapCanvas({
+  image,
+  imageUrl,
+  grid,
+  links,
+  linkTitles,
+  selectedLinkId,
+  onSelectLink,
+  readOnly = false,
+}: MapCanvasProps) {
+  const bounds: [[number, number], [number, number]] = [
+    [0, 0],
+    [image.height, image.width],
+  ];
+
+  const hexPolygons = useMemo(() => {
+    if (!grid || grid.type !== "hex") return [];
+    const basis = loadHexBasis(grid);
+    if (!basis) return [];
+    return buildHexPolygons(basis, image.width, image.height);
+  }, [grid, image.width, image.height]);
+
+  return (
+    <MapContainer
+      crs={CRS.Simple}
+      bounds={bounds}
+      style={{ width: "100%", height: "100%", background: "#12150f" }}
+      zoomSnap={0.25}
+      minZoom={-4}
+      maxZoom={3}
+    >
+      <ImageOverlay url={imageUrl} bounds={bounds} />
+
+      {/* Square grids (docs/ROADMAP.md near-term priority) aren't rendered yet —
+          hexPolygons is empty for grid.type === "square" until that lands. */}
+      {hexPolygons.map((corners, i) => (
+        <Polygon
+          key={i}
+          positions={polygonToLatLngs(image.height, corners)}
+          pathOptions={{
+            color: grid?.type === "hex" ? grid.style.color : DEFAULT_MARKER_COLOR,
+            weight: grid?.type === "hex" ? grid.style.weight : 1,
+            opacity: grid?.type === "hex" ? grid.style.opacity : 0.45,
+            fill: false,
+            interactive: false,
+          }}
+        />
+      ))}
+
+      {links
+        .filter((link) => !link.hidden)
+        .map((link) => {
+          const color = link.color ?? DEFAULT_MARKER_COLOR;
+          const isSelected = link.id === selectedLinkId;
+          const icon = divIcon({
+            className: "",
+            html: `<div style="
+              width: ${isSelected ? 20 : 16}px;
+              height: ${isSelected ? 20 : 16}px;
+              border-radius: 50%;
+              background: rgba(23,25,20,0.88);
+              border: 2px solid ${color};
+              box-shadow: 0 0 0 2px rgba(0,0,0,0.35);
+            "></div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+          });
+
+          return (
+            <Marker
+              key={link.id}
+              position={pxToLatLng(image.height, link)}
+              icon={icon}
+              eventHandlers={
+                readOnly
+                  ? {}
+                  : {
+                      click: () => onSelectLink?.(link.id),
+                    }
+              }
+            >
+              <Popup>
+                <strong>{linkTitles[link.id] ?? link.id}</strong>
+                <br />
+                <span style={{ opacity: 0.7 }}>{link.type}</span>
+              </Popup>
+            </Marker>
+          );
+        })}
+    </MapContainer>
+  );
+}
