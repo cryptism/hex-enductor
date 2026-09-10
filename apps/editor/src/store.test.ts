@@ -6,10 +6,10 @@ describe("useAppStore", () => {
     useAppStore.getState().setCurrentLocation("somewhere");
     useAppStore.getState().selectLink("something");
 
-    useAppStore.getState().openProject("/tmp/test.hexen.yml");
+    useAppStore.getState().openServerProject("/tmp/test.hexen.yml");
 
     const state = useAppStore.getState();
-    expect(state.projectPath).toBe("/tmp/test.hexen.yml");
+    expect(state.storage?.label).toBe("/tmp/test.hexen.yml");
     expect(state.currentLocationId).toBeNull();
     expect(state.selectedLinkId).toBeNull();
   });
@@ -29,7 +29,7 @@ describe("useAppStore", () => {
 
   test("opening a project drops back to view mode", () => {
     useAppStore.getState().setEditMode(true);
-    useAppStore.getState().openProject("/tmp/test.hexen.yml");
+    useAppStore.getState().openServerProject("/tmp/test.hexen.yml");
 
     expect(useAppStore.getState().editMode).toBe(false);
   });
@@ -46,7 +46,7 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().gridVisible).toBe(true);
 
     useAppStore.getState().setGridVisible(false);
-    useAppStore.getState().openProject("/tmp/test.hexen.yml");
+    useAppStore.getState().openServerProject("/tmp/test.hexen.yml");
 
     expect(useAppStore.getState().gridVisible).toBe(false);
   });
@@ -73,5 +73,25 @@ describe("useAppStore", () => {
 
     expect(useAppStore.getState().selectedLinkId).toBeNull();
     expect(useAppStore.getState().placingLocation).toBe(true);
+  });
+
+  test("setStorage (a non-server backend) resets the same way opening does", () => {
+    useAppStore.getState().setEditMode(true);
+    useAppStore.getState().selectLink("inn");
+
+    const fakeStorage = { label: "my-folder" } as ReturnType<typeof useAppStore.getState>["storage"];
+    useAppStore.getState().setStorage(fakeStorage!);
+
+    const state = useAppStore.getState();
+    expect(state.storage).toBe(fakeStorage);
+    expect(state.editMode).toBe(false);
+    expect(state.selectedLinkId).toBeNull();
+  });
+
+  test("closeProject clears the active storage", () => {
+    useAppStore.getState().openServerProject("/tmp/test.hexen.yml");
+    useAppStore.getState().closeProject();
+
+    expect(useAppStore.getState().storage).toBeNull();
   });
 });

@@ -18,8 +18,10 @@
       "name": "@hex-enductor/editor",
       "version": "0.0.0",
       "dependencies": {
+        "@hex-enductor/content-resolver": "workspace:*",
         "@hex-enductor/hexen-schema": "workspace:*",
         "@hex-enductor/map-core": "workspace:*",
+        "@hex-enductor/project-ops": "workspace:*",
         "@hookform/resolvers": "^5.9.1",
         "@tanstack/react-query": "^5.102.8",
         "@trpc/client": "^11.18.0",
@@ -37,6 +39,7 @@
         "@types/node": "^22.10.2",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.7",
+        "@types/wicg-file-system-access": "^2023.10.6",
         "@vitejs/plugin-react": "^6.1.1",
         "typescript": "^5.7.2",
         "vite": "^8.2.2",
@@ -49,6 +52,7 @@
         "@hex-enductor/content-obsidian": "workspace:*",
         "@hex-enductor/content-resolver": "workspace:*",
         "@hex-enductor/hexen-schema": "workspace:*",
+        "@hex-enductor/project-ops": "workspace:*",
         "@hono/trpc-server": "^0.4.2",
         "@trpc/server": "^11.18.0",
         "hono": "^4.6.14",
@@ -112,6 +116,17 @@
         "typescript": "^5.7.2",
       },
     },
+    "packages/project-ops": {
+      "name": "@hex-enductor/project-ops",
+      "version": "0.0.0",
+      "dependencies": {
+        "@hex-enductor/hexen-schema": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.1.14",
+        "typescript": "^5.7.2",
+      },
+    },
   },
   "packages": {
     "@hex-enductor/content-obsidian": ["@hex-enductor/content-obsidian@workspace:packages/content-obsidian"],
@@ -123,6 +138,8 @@
     "@hex-enductor/hexen-schema": ["@hex-enductor/hexen-schema@workspace:packages/hexen-schema"],
 
     "@hex-enductor/map-core": ["@hex-enductor/map-core@workspace:packages/map-core"],
+
+    "@hex-enductor/project-ops": ["@hex-enductor/project-ops@workspace:packages/project-ops"],
 
     "@hex-enductor/server": ["@hex-enductor/server@workspace:apps/server"],
 
@@ -189,6 +206,8 @@
     "@types/react": ["@types/react@19.2.18", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w=="],
 
     "@types/react-dom": ["@types/react-dom@19.2.7", "", { "peerDependencies": { "@types/react": "^19.2.0" } }, "sha512-I8bPpDLcHBv1qiIiXDCy71Rt8eQDKJP0sMSWJphDdAcdqiJ1sGpZamavoEIRZmYzjia9LuEb2HlYdDpmoENpvQ=="],
+
+    "@types/wicg-file-system-access": ["@types/wicg-file-system-access@2023.10.7", "", {}, "sha512-g49ijasEJvCd7ifmAY2D0wdEtt1xRjBbA33PJTiv8mKBr7DoMsPeISoJ8oQOTopSRi+FBWPpPW5ouDj2QPKtGA=="],
 
     "@vitejs/plugin-react": ["@vitejs/plugin-react@6.1.1", "", { "dependencies": { "@rolldown/pluginutils": "^1.0.1" }, "peerDependencies": { "@rolldown/plugin-babel": "^0.1.7 || ^0.2.0", "babel-plugin-react-compiler": "^1.0.0", "oxc-transform-react": "^0.145.0", "vite": "^8.0.0" }, "optionalPeers": ["@rolldown/plugin-babel", "babel-plugin-react-compiler", "oxc-transform-react"] }, "sha512-yxLaQV9gkhS8ezJqCM6+ndU7mDY6gqAg75NQ+0IjwEI8IYOmQCgkRwHKVSfWXW076DsqMo0Dk+0FK1U+M5RgFw=="],
 

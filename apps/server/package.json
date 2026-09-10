@@ -13,6 +13,7 @@
     "@hex-enductor/content-obsidian": "workspace:*",
     "@hex-enductor/content-resolver": "workspace:*",
     "@hex-enductor/hexen-schema": "workspace:*",
+    "@hex-enductor/project-ops": "workspace:*",
     "@hono/trpc-server": "^0.4.2",
     "@trpc/server": "^11.18.0",
     "hono": "^4.6.14",

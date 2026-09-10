@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "./store.ts";
 import { trpc } from "./trpc.ts";
 import { getRecentProjects } from "./recentProjects.ts";
+import { addLocalRecent, getLocalRecents, type LocalRecentEntry } from "./localRecents.ts";
+import { createLocalFsStorage, supportsLocalFs } from "./storage/index.ts";
 
 function joinPath(dir: string, name: string): string {
   return dir.endsWith("/") ? `${dir}${name}` : `${dir}/${name}`;
@@ -105,13 +107,51 @@ export function ProjectPicker({ onClose }: ProjectPickerProps) {
   const [pathInput, setPathInput] = useState("");
   const [browsing, setBrowsing] = useState(false);
   const [creating, setCreating] = useState(false);
-  const openProject = useAppStore((s) => s.openProject);
+  const openServerProject = useAppStore((s) => s.openServerProject);
+  const setStorage = useAppStore((s) => s.setStorage);
   const [recent] = useState(() => getRecentProjects());
+  const [localRecent, setLocalRecent] = useState<LocalRecentEntry[]>([]);
+  const [localError, setLocalError] = useState<string | undefined>(undefined);
   const createProject = trpc.createProject.useMutation();
+  const localFsSupported = supportsLocalFs();
+
+  useEffect(() => {
+    if (localFsSupported) getLocalRecents().then(setLocalRecent);
+  }, [localFsSupported]);
 
   function openAndClose(path: string) {
-    openProject(path);
+    openServerProject(path);
     onClose?.();
+  }
+
+  async function openFromBrowser() {
+    setLocalError(undefined);
+    try {
+      const handle = await window.showDirectoryPicker();
+      setStorage(createLocalFsStorage(handle));
+      await addLocalRecent(handle);
+      onClose?.();
+    } catch (err) {
+      // Closing the picker without choosing anything isn't an error.
+      if (err instanceof Error && err.name === "AbortError") return;
+      setLocalError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function openLocalRecent(entry: LocalRecentEntry) {
+    setLocalError(undefined);
+    try {
+      const permission = await entry.handle.requestPermission({ mode: "readwrite" });
+      if (permission !== "granted") {
+        setLocalError(`Permission to "${entry.name}" was denied.`);
+        return;
+      }
+      setStorage(createLocalFsStorage(entry.handle));
+      await addLocalRecent(entry.handle);
+      onClose?.();
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   return (
@@ -122,7 +162,34 @@ export function ProjectPicker({ onClose }: ProjectPickerProps) {
         </button>
       )}
 
-      <p>Open a .hexen.yml project by its absolute path.</p>
+      {localFsSupported ? (
+        <button type="button" className="tool-button" onClick={openFromBrowser}>
+          Open from this browser…
+        </button>
+      ) : (
+        <p className="muted">
+          This browser can't open a project folder directly (Chrome and Edge can) — use a locally-running server
+          instead, below.
+        </p>
+      )}
+      {localError && <span className="field-error">{localError}</span>}
+
+      {localRecent.length > 0 && (
+        <div className="recent-projects">
+          <h3>Recent (this browser)</h3>
+          <ul>
+            {localRecent.map((entry) => (
+              <li key={entry.name}>
+                <button className="link-button" onClick={() => openLocalRecent(entry)}>
+                  {entry.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p>Or, open a .hexen.yml project on a locally-running server, by its absolute path.</p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -134,7 +201,6 @@ export function ProjectPicker({ onClose }: ProjectPickerProps) {
           value={pathInput}
           onChange={(e) => setPathInput(e.target.value)}
           placeholder="/path/to/project.hexen.yml"
-          autoFocus
         />
         <button type="submit">Open</button>
       </form>
@@ -162,7 +228,7 @@ export function ProjectPicker({ onClose }: ProjectPickerProps) {
 
       {recent.length > 0 && (
         <div className="recent-projects">
-          <h3>Recent</h3>
+          <h3>Recent (server)</h3>
           <ul>
             {recent.map((path) => (
               <li key={path}>

@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { MapCanvas } from "@hex-enductor/map-core";
 import { useAppStore } from "./store.ts";
-import { trpc, serverUrl } from "./trpc.ts";
 import { LinkForm } from "./LinkForm.tsx";
 import { LocationContentForm } from "./LocationContentForm.tsx";
 import { AddLocationForm } from "./AddLocationForm.tsx";
@@ -10,17 +9,8 @@ import { ImageUpload } from "./ImageUpload.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { BrandMark } from "./Logo.tsx";
 import { LoadingScreen } from "./LoadingScreen.tsx";
+import type { OpenedProjectData } from "./storage/index.ts";
 import type { Grid, Link, Point } from "@hex-enductor/hexen-schema";
-
-function dirname(path: string): string {
-  const i = path.lastIndexOf("/");
-  return i === -1 ? "." : path.slice(0, i);
-}
-
-function imageUrl(projectPath: string, file: string): string {
-  const dir = dirname(projectPath);
-  return `${serverUrl()}/image?dir=${encodeURIComponent(dir)}&file=${encodeURIComponent(file)}`;
-}
 
 function OpenProjectForm() {
   return (
@@ -34,7 +24,7 @@ function OpenProjectForm() {
 }
 
 function App() {
-  const projectPath = useAppStore((s) => s.projectPath);
+  const storage = useAppStore((s) => s.storage);
   const currentLocationId = useAppStore((s) => s.currentLocationId);
   const selectedLinkId = useAppStore((s) => s.selectedLinkId);
   const editMode = useAppStore((s) => s.editMode);
@@ -46,6 +36,30 @@ function App() {
   const setGridVisible = useAppStore((s) => s.setGridVisible);
   const setPlacingLocation = useAppStore((s) => s.setPlacingLocation);
 
+  // The active backend's data — no more react-query: every storage
+  // method already hands back the freshly reopened project, so a
+  // mutation's .then(setData) is the entire "refetch" step.
+  const [data, setData] = useState<OpenedProjectData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setData(null);
+    setLoadError(null);
+    if (!storage) return;
+    let cancelled = false;
+    storage
+      .open()
+      .then((d) => {
+        if (!cancelled) setData(d);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storage]);
+
   // Where the Add Location tool's pending click landed, in image pixel
   // space — local, not store state, since it's meaningless the moment
   // placingLocation goes false (see the effect below).
@@ -55,40 +69,27 @@ function App() {
   }, [placingLocation]);
 
   // Configure Grid is a command, not a tool: opening it hands MapCanvas
-  // a draft grid to render live, and only saveGrid.mutate on Apply
-  // commits it. Also local, not store state, for the same reason as
+  // a draft grid to render live, and only saveGrid on Apply commits
+  // it. Also local, not store state, for the same reason as
   // pendingPoint above.
   const [configuringGrid, setConfiguringGrid] = useState(false);
   const [draftGrid, setDraftGrid] = useState<Grid | null>(null);
   useEffect(() => {
     setConfiguringGrid(false);
     setDraftGrid(null);
-  }, [currentLocationId, projectPath, editMode]);
+  }, [currentLocationId, storage, editMode]);
 
   // The landing screen's picker, reopened as a panel over the editor —
   // switching projects, not editing this one, so it's available
   // regardless of editMode and isn't reset by any of the effects above.
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const query = trpc.openProject.useQuery(
-    { path: projectPath! },
-    { enabled: projectPath !== null },
-  );
-  const utils = trpc.useUtils();
-  const saveLink = trpc.saveLink.useMutation({
-    onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
-  });
-  const saveLocationContent = trpc.saveLocationContent.useMutation({
-    onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
-  });
-  const addLocationLink = trpc.addLocationLink.useMutation({
-    onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
-  });
-  const saveGrid = trpc.saveGrid.useMutation({
-    onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
-  });
+  const [savingLink, setSavingLink] = useState(false);
+  const [savingContent, setSavingContent] = useState(false);
+  const [addingLocation, setAddingLocation] = useState(false);
+  const [savingGrid, setSavingGrid] = useState(false);
 
-  const project = query.data?.project;
+  const project = data?.project;
 
   // Default to the project's defaultLocation once it loads.
   useEffect(() => {
@@ -97,8 +98,35 @@ function App() {
     }
   }, [project, currentLocationId, setCurrentLocation]);
 
-  if (projectPath === null) return <OpenProjectForm />;
-  if (query.isError) return <div className="status error">{query.error.message}</div>;
+  // The current location's image, resolved to a displayable URL —
+  // async because local (File System Access) storage reads the file
+  // via the folder handle and hands back a blob: URL that has to be
+  // revoked once we're done with it.
+  const currentLocationImageFile = project?.locations.find((l) => l.id === currentLocationId)?.image?.file;
+  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!storage || !currentLocationImageFile) {
+      setResolvedImageUrl(null);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    storage.getImageUrl(currentLocationImageFile).then((url) => {
+      if (cancelled) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      objectUrl = url;
+      setResolvedImageUrl(url);
+    });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [storage, currentLocationImageFile]);
+
+  if (storage === null) return <OpenProjectForm />;
+  if (loadError) return <div className="status error">{loadError}</div>;
 
   let mainContent: ReactNode = null;
   if (project) {
@@ -107,10 +135,7 @@ function App() {
       mainContent = <div className="status error">Unknown location "{currentLocationId}"</div>;
     } else {
       const linkTitles = Object.fromEntries(
-        currentLocation.links.map((link) => [
-          link.id,
-          query.data?.resolvedContent[link.id]?.title ?? link.id,
-        ]),
+        currentLocation.links.map((link) => [link.id, data?.resolvedContent[link.id]?.title ?? link.id]),
       );
 
       const selectedLink = currentLocation.links.find((l) => l.id === selectedLinkId);
@@ -120,11 +145,11 @@ function App() {
         ? project.locations.find((l) => l.id === selectedLink.id)
         : undefined;
 
-      const warnings = query.data?.warnings ?? [];
-      const resolveErrors = query.data?.resolveErrors ?? {};
+      const warnings = data?.warnings ?? [];
+      const resolveErrors = data?.resolveErrors ?? {};
 
-      const locationTitle = query.data?.resolvedContent[currentLocation.id]?.title ?? "";
-      const locationBody = query.data?.resolvedContent[currentLocation.id]?.body ?? "";
+      const locationTitle = data?.resolvedContent[currentLocation.id]?.title ?? "";
+      const locationBody = data?.resolvedContent[currentLocation.id]?.body ?? "";
       const isInlineContent = currentLocation.content === null || currentLocation.content.type === "inline";
 
       mainContent = (
@@ -157,10 +182,10 @@ function App() {
             {editMode && (
               <ImageUpload
                 key={currentLocation.id}
-                projectPath={projectPath}
+                storage={storage}
                 locationId={currentLocation.id}
                 hasImage={currentLocation.image !== null}
-                onDone={() => utils.openProject.invalidate({ path: projectPath })}
+                onDone={setData}
               />
             )}
 
@@ -184,14 +209,14 @@ function App() {
                 locationId={currentLocation.id}
                 title={locationTitle}
                 body={locationBody}
-                saving={saveLocationContent.isPending}
-                onSave={(patch) =>
-                  saveLocationContent.mutate({
-                    path: projectPath,
-                    locationId: currentLocation.id,
-                    patch,
-                  })
-                }
+                saving={savingContent}
+                onSave={(patch) => {
+                  setSavingContent(true);
+                  storage
+                    .saveLocationContent(currentLocation.id, patch)
+                    .then(setData)
+                    .finally(() => setSavingContent(false));
+                }}
               />
             ) : (
               <div className="location-heading">
@@ -207,9 +232,7 @@ function App() {
 
             {(warnings.length > 0 || Object.keys(resolveErrors).length > 0) && (
               <details className="warnings">
-                <summary>
-                  {warnings.length + Object.keys(resolveErrors).length} warning(s)
-                </summary>
+                <summary>{warnings.length + Object.keys(resolveErrors).length} warning(s)</summary>
                 <ul>
                   {warnings.map((w, i) => (
                     <li key={`w${i}`}>{w}</li>
@@ -240,11 +263,11 @@ function App() {
           </aside>
 
           <main className="map-area">
-            {currentLocation.image ? (
+            {currentLocation.image && resolvedImageUrl ? (
               <>
                 <MapCanvas
                   image={currentLocation.image}
-                  imageUrl={imageUrl(projectPath, currentLocation.image.file)}
+                  imageUrl={resolvedImageUrl}
                   grid={configuringGrid ? draftGrid : currentLocation.grid}
                   gridVisible={gridVisible || configuringGrid}
                   links={currentLocation.links}
@@ -255,14 +278,12 @@ function App() {
                   onPlaceLocation={setPendingPoint}
                 />
                 <label className="grid-toggle">
-                  <input
-                    type="checkbox"
-                    checked={gridVisible}
-                    onChange={(e) => setGridVisible(e.target.checked)}
-                  />
+                  <input type="checkbox" checked={gridVisible} onChange={(e) => setGridVisible(e.target.checked)} />
                   Show grid
                 </label>
               </>
+            ) : currentLocation.image ? (
+              <div className="status">Loading image…</div>
             ) : (
               <div className="status">"{currentLocation.id}" has no image — nothing to render.</div>
             )}
@@ -275,18 +296,18 @@ function App() {
                 initialGrid={draftGrid}
                 image={currentLocation.image}
                 onPreview={setDraftGrid}
-                saving={saveGrid.isPending}
-                onApply={(grid) =>
-                  saveGrid.mutate(
-                    { path: projectPath, locationId: currentLocation.id, grid },
-                    {
-                      onSuccess: () => {
-                        setConfiguringGrid(false);
-                        setDraftGrid(null);
-                      },
-                    },
-                  )
-                }
+                saving={savingGrid}
+                onApply={(grid) => {
+                  setSavingGrid(true);
+                  storage
+                    .saveGrid(currentLocation.id, grid)
+                    .then((d) => {
+                      setData(d);
+                      setConfiguringGrid(false);
+                      setDraftGrid(null);
+                    })
+                    .finally(() => setSavingGrid(false));
+                }}
                 onCancel={() => {
                   setConfiguringGrid(false);
                   setDraftGrid(null);
@@ -296,20 +317,17 @@ function App() {
           ) : placingLocation && pendingPoint ? (
             <aside className="edit-panel">
               <AddLocationForm
-                saving={addLocationLink.isPending}
-                onSave={(values) =>
-                  addLocationLink.mutate(
-                    {
-                      path: projectPath,
-                      parentLocationId: currentLocation.id,
-                      locationId: values.locationId,
-                      x: pendingPoint.x,
-                      y: pendingPoint.y,
-                      type: values.type,
-                    },
-                    { onSuccess: () => setPlacingLocation(false) },
-                  )
-                }
+                saving={addingLocation}
+                onSave={(values) => {
+                  setAddingLocation(true);
+                  storage
+                    .addLocationLink(currentLocation.id, values.locationId, pendingPoint.x, pendingPoint.y, values.type)
+                    .then((d) => {
+                      setData(d);
+                      setPlacingLocation(false);
+                    })
+                    .finally(() => setAddingLocation(false));
+                }}
                 onCancel={() => setPendingPoint(null)}
               />
             </aside>
@@ -321,15 +339,14 @@ function App() {
                   key={selectedLink.id}
                   link={selectedLink}
                   title={linkTitles[selectedLink.id] ?? selectedLink.id}
-                  saving={saveLink.isPending}
-                  onSave={(patch) =>
-                    saveLink.mutate({
-                      path: projectPath,
-                      locationId: currentLocation.id,
-                      linkId: selectedLink.id,
-                      patch: patch as Partial<Link>,
-                    })
-                  }
+                  saving={savingLink}
+                  onSave={(patch) => {
+                    setSavingLink(true);
+                    storage
+                      .saveLink(currentLocation.id, selectedLink.id, patch as Partial<Link>)
+                      .then(setData)
+                      .finally(() => setSavingLink(false));
+                  }}
                 />
                 {selectedTargetLocation?.grid && (
                   <button className="link-button" onClick={() => setCurrentLocation(selectedTargetLocation.id)}>

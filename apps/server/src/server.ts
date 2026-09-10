@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./router.ts";
-import { readImageSize } from "./imageSize.ts";
+import { readImageSize } from "@hex-enductor/project-ops";
 
 const UPLOAD_EXTENSIONS: Record<string, string> = { png: "png", jpg: "jpg", jpeg: "jpg" };
 
@@ -78,7 +78,7 @@ app.post("/image", async (c) => {
   }
 
   const bytes = new Uint8Array(await c.req.arrayBuffer());
-  const size = readImageSize(Buffer.from(bytes));
+  const size = readImageSize(bytes);
   if (!size) {
     return c.text("Couldn't read image dimensions — is this really a PNG or JPEG?", 400);
   }

@@ -1,10 +1,12 @@
 import { create } from "zustand";
 import { addRecentProject } from "./recentProjects.ts";
+import { createServerStorage, type ProjectStorage } from "./storage/index.ts";
 
-// Client/UI state only — the project itself (locations, resolved
-// content) lives in react-query's cache via trpc.openProject, not here.
+// Client/UI state only — the project's own data (locations, resolved
+// content) is fetched through `storage` and held by App itself, not
+// here.
 interface AppState {
-  projectPath: string | null;
+  storage: ProjectStorage | null;
   currentLocationId: string | null;
   selectedLinkId: string | null;
   // Gates every mutating surface (link edits, location content edits,
@@ -19,7 +21,11 @@ interface AppState {
   // pin while this is true. Exited whenever the surrounding context
   // changes (mode, location, project) so it never survives a navigation.
   placingLocation: boolean;
-  openProject: (path: string) => void;
+  /** The server-backed path — open remains keyed to an absolute path string, same as always. */
+  openServerProject: (path: string) => void;
+  /** Any other backend (today: the File System Access API one) — no path string to remember. */
+  setStorage: (storage: ProjectStorage) => void;
+  closeProject: () => void;
   setCurrentLocation: (id: string | null) => void;
   selectLink: (id: string | null) => void;
   setEditMode: (editMode: boolean) => void;
@@ -27,23 +33,29 @@ interface AppState {
   setPlacingLocation: (placingLocation: boolean) => void;
 }
 
+function reset(storage: ProjectStorage) {
+  return {
+    storage,
+    currentLocationId: null,
+    selectedLinkId: null,
+    editMode: false,
+    placingLocation: false,
+  };
+}
+
 export const useAppStore = create<AppState>((set) => ({
-  projectPath: null,
+  storage: null,
   currentLocationId: null,
   selectedLinkId: null,
   editMode: false,
   gridVisible: true,
   placingLocation: false,
-  openProject: (path) => {
+  openServerProject: (path) => {
     addRecentProject(path);
-    set({
-      projectPath: path,
-      currentLocationId: null,
-      selectedLinkId: null,
-      editMode: false,
-      placingLocation: false,
-    });
+    set(reset(createServerStorage(path)));
   },
+  setStorage: (storage) => set(reset(storage)),
+  closeProject: () => set({ storage: null, currentLocationId: null, selectedLinkId: null }),
   setCurrentLocation: (id) => set({ currentLocationId: id, selectedLinkId: null, placingLocation: false }),
   selectLink: (id) => set({ selectedLinkId: id }),
   setEditMode: (editMode) => set({ editMode, selectedLinkId: null, placingLocation: false }),
