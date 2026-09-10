@@ -1,9 +1,12 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./router.ts";
+import { readImageSize } from "./imageSize.ts";
+
+const UPLOAD_EXTENSIONS: Record<string, string> = { png: "png", jpg: "jpg", jpeg: "jpg" };
 
 const MIME_TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -48,6 +51,42 @@ app.get("/image", async (c) => {
   } catch {
     return c.text("Not found", 404);
   }
+});
+
+// A location's base map image: the client posts raw bytes for a given
+// project dir + location id, we settle on a filename ourselves (so
+// re-uploading for the same location always replaces the same file
+// rather than accumulating orphans) and hand back what saveGrid's
+// sibling mutation, saveImage, needs to write into the .hexen.yml.
+app.post("/image", async (c) => {
+  const projectDir = c.req.query("dir");
+  const locationId = c.req.query("locationId");
+  const extParam = c.req.query("ext")?.toLowerCase();
+  if (!projectDir || !locationId || !extParam) {
+    return c.text("Missing dir, locationId, or ext query param", 400);
+  }
+  const ext = UPLOAD_EXTENSIONS[extParam];
+  if (!ext) {
+    return c.text(`Unsupported image extension "${extParam}" — use png or jpg/jpeg`, 400);
+  }
+
+  const safeName = `${locationId.replace(/[^a-zA-Z0-9_-]/g, "-")}.${ext}`;
+  const assetsDir = resolve(projectDir, "_assets");
+  const target = resolve(assetsDir, safeName);
+  if (!target.startsWith(assetsDir + sep)) {
+    return c.text("file escapes the project directory", 400);
+  }
+
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  const size = readImageSize(Buffer.from(bytes));
+  if (!size) {
+    return c.text("Couldn't read image dimensions — is this really a PNG or JPEG?", 400);
+  }
+
+  await mkdir(assetsDir, { recursive: true });
+  await writeFile(target, bytes);
+
+  return c.json({ file: `_assets/${safeName}`, width: size.width, height: size.height });
 });
 
 app.get("/", (c) => c.text("hex-enductor server"));

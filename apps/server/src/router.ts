@@ -1,7 +1,13 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { LinkSchema, InlineLocationContentSchema, GridSchema, type HexenProject } from "@hex-enductor/hexen-schema";
+import {
+  LinkSchema,
+  InlineLocationContentSchema,
+  GridSchema,
+  ImageRefSchema,
+  type HexenProject,
+} from "@hex-enductor/hexen-schema";
 import { router, publicProcedure } from "./trpc.ts";
 import { openProject, saveProject } from "./projectIO.ts";
 import { listDirectory } from "./browse.ts";
@@ -168,6 +174,28 @@ export const appRouter = router({
       }
 
       location.grid = input.grid;
+
+      await saveProject(input.path, project);
+      return openProject(input.path);
+    }),
+
+  saveImage: publicProcedure
+    .input(
+      z.object({
+        path: z.string(),
+        locationId: z.string(),
+        image: ImageRefSchema.nullable(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { project } = await openProject(input.path);
+
+      const location = project.locations.find((l) => l.id === input.locationId);
+      if (!location) {
+        throw new Error(`No location "${input.locationId}" in ${input.path}`);
+      }
+
+      location.image = input.image;
 
       await saveProject(input.path, project);
       return openProject(input.path);

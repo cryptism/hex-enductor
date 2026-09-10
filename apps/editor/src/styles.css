@@ -96,6 +96,19 @@ body {
   color: var(--accent);
 }
 
+.image-upload {
+  margin-bottom: 1rem;
+}
+
+.image-upload .tool-button {
+  margin-bottom: 0.4rem;
+}
+
+.image-upload .field-error {
+  display: block;
+  margin-top: 0.3rem;
+}
+
 .form-actions {
   display: flex;
   align-items: center;

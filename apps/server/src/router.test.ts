@@ -200,3 +200,50 @@ locations:
     );
   });
 });
+
+describe("saveImage", () => {
+  test("sets an image on a location that had none", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+    content: { type: inline, title: The Town, body: "" }
+`);
+    const image = { file: "_assets/town.png", width: 400, height: 300 };
+    const result = await caller.saveImage({ path, locationId: "town", image });
+
+    expect(result.project.locations[0]!.image).toEqual(image);
+  });
+
+  test("clears an image back to null", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+    image: { file: _assets/town.png, width: 400, height: 300 }
+`);
+    const result = await caller.saveImage({ path, locationId: "town", image: null });
+
+    expect(result.project.locations[0]!.image).toBeNull();
+  });
+
+  test("rejects an unknown location", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+`);
+    await expect(caller.saveImage({ path, locationId: "nowhere", image: null })).rejects.toThrow(
+      /No location "nowhere"/,
+    );
+  });
+});

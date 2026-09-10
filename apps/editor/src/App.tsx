@@ -6,6 +6,7 @@ import { LinkForm } from "./LinkForm.tsx";
 import { LocationContentForm } from "./LocationContentForm.tsx";
 import { AddLocationForm } from "./AddLocationForm.tsx";
 import { ConfigureGridForm } from "./ConfigureGridForm.tsx";
+import { ImageUpload } from "./ImageUpload.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { BrandMark } from "./Logo.tsx";
 import { LoadingScreen } from "./LoadingScreen.tsx";
@@ -151,6 +152,16 @@ function App() {
               >
                 {placingLocation ? "Click the map…" : "Add Location"}
               </button>
+            )}
+
+            {editMode && (
+              <ImageUpload
+                key={currentLocation.id}
+                projectPath={projectPath}
+                locationId={currentLocation.id}
+                hasImage={currentLocation.image !== null}
+                onDone={() => utils.openProject.invalidate({ path: projectPath })}
+              />
             )}
 
             {editMode && currentLocation.image && (
