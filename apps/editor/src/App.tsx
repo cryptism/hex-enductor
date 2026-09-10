@@ -116,8 +116,10 @@ function App() {
   const projectPath = useAppStore((s) => s.projectPath);
   const currentLocationId = useAppStore((s) => s.currentLocationId);
   const selectedLinkId = useAppStore((s) => s.selectedLinkId);
+  const editMode = useAppStore((s) => s.editMode);
   const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
   const selectLink = useAppStore((s) => s.selectLink);
+  const setEditMode = useAppStore((s) => s.setEditMode);
 
   const query = trpc.openProject.useQuery(
     { path: projectPath! },
@@ -166,15 +168,25 @@ function App() {
       const warnings = query.data?.warnings ?? [];
       const resolveErrors = query.data?.resolveErrors ?? {};
 
+      const locationTitle = query.data?.resolvedContent[currentLocation.id]?.title ?? "";
+      const locationBody = query.data?.resolvedContent[currentLocation.id]?.body ?? "";
+      const isInlineContent = currentLocation.content === null || currentLocation.content.type === "inline";
+
       mainContent = (
         <div className="app">
           <aside className="sidebar">
-            {currentLocation.content === null || currentLocation.content.type === "inline" ? (
+            <label className="mode-toggle">
+              <input type="checkbox" checked={editMode} onChange={(e) => setEditMode(e.target.checked)} />
+              <span className="mode-toggle-track" aria-hidden="true" />
+              <span className="mode-toggle-label">{editMode ? "Editing" : "Viewing"}</span>
+            </label>
+
+            {editMode && isInlineContent ? (
               <LocationContentForm
                 key={currentLocation.id}
                 locationId={currentLocation.id}
-                title={query.data?.resolvedContent[currentLocation.id]?.title ?? ""}
-                body={query.data?.resolvedContent[currentLocation.id]?.body ?? ""}
+                title={locationTitle}
+                body={locationBody}
                 saving={saveLocationContent.isPending}
                 onSave={(patch) =>
                   saveLocationContent.mutate({
@@ -185,7 +197,10 @@ function App() {
                 }
               />
             ) : (
-              <h2>{query.data?.resolvedContent[currentLocation.id]?.title ?? currentLocation.id}</h2>
+              <div className="location-heading">
+                <h2>{locationTitle || currentLocation.id}</h2>
+                {isInlineContent && locationBody && <p className="location-body">{locationBody}</p>}
+              </div>
             )}
             {currentLocation.id !== project.defaultLocation && (
               <button className="link-button" onClick={() => setCurrentLocation(project.defaultLocation)}>
@@ -243,7 +258,7 @@ function App() {
             )}
           </main>
 
-          {selectedLink && (
+          {editMode && selectedLink && (
             <aside className="edit-panel">
               <LinkForm
                 key={selectedLink.id}

@@ -22,4 +22,23 @@ describe("useAppStore", () => {
     expect(state.currentLocationId).toBe("town");
     expect(state.selectedLinkId).toBeNull();
   });
+
+  test("starts in view mode, off by default", () => {
+    expect(useAppStore.getState().editMode).toBe(false);
+  });
+
+  test("opening a project drops back to view mode", () => {
+    useAppStore.getState().setEditMode(true);
+    useAppStore.getState().openProject("/tmp/test.hexen.yml");
+
+    expect(useAppStore.getState().editMode).toBe(false);
+  });
+
+  test("switching edit mode clears link selection", () => {
+    useAppStore.getState().selectLink("inn");
+    useAppStore.getState().setEditMode(true);
+
+    expect(useAppStore.getState().selectedLinkId).toBeNull();
+    expect(useAppStore.getState().editMode).toBe(true);
+  });
 });
