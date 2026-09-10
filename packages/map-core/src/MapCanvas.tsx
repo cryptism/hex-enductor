@@ -3,6 +3,7 @@ import { CRS, divIcon } from "leaflet";
 import { MapContainer, ImageOverlay, Polygon, Marker, Popup, useMapEvents } from "react-leaflet";
 import type { Grid, ImageRef, Link, Point } from "@hex-enductor/hexen-schema";
 import { loadHexBasis, buildHexPolygons } from "./hexMath.ts";
+import { buildSquarePolygons } from "./squareMath.ts";
 import { pxToLatLng, polygonToLatLngs, latLngToPx } from "./coords.ts";
 import "leaflet/dist/leaflet.css";
 
@@ -55,11 +56,13 @@ export function MapCanvas({
     [image.height, image.width],
   ];
 
-  const hexPolygons = useMemo(() => {
-    if (!grid || grid.type !== "hex") return [];
-    const basis = loadHexBasis(grid);
-    if (!basis) return [];
-    return buildHexPolygons(basis, image.width, image.height);
+  const gridPolygons = useMemo(() => {
+    if (!grid) return [];
+    if (grid.type === "hex") {
+      const basis = loadHexBasis(grid);
+      return basis ? buildHexPolygons(basis, image.width, image.height) : [];
+    }
+    return buildSquarePolygons(grid, image.width, image.height);
   }, [grid, image.width, image.height]);
 
   return (
@@ -75,17 +78,14 @@ export function MapCanvas({
       {placing && onPlaceLocation && <ClickToPlace imageHeight={image.height} onPlace={onPlaceLocation} />}
       <ImageOverlay url={imageUrl} bounds={bounds} />
 
-      {/* Square grids aren't rendered yet — hexPolygons is empty for
-          grid.type === "square" until that lands (see hexMath.test.ts
-          for what buildHexPolygons is actually verified to do). */}
-      {gridVisible && hexPolygons.map((corners, i) => (
+      {gridVisible && gridPolygons.map((corners, i) => (
         <Polygon
           key={i}
           positions={polygonToLatLngs(image.height, corners)}
           pathOptions={{
-            color: grid?.type === "hex" ? grid.style.color : DEFAULT_MARKER_COLOR,
-            weight: grid?.type === "hex" ? grid.style.weight : 1,
-            opacity: grid?.type === "hex" ? grid.style.opacity : 0.45,
+            color: grid ? grid.style.color : DEFAULT_MARKER_COLOR,
+            weight: grid ? grid.style.weight : 1,
+            opacity: grid ? grid.style.opacity : 0.45,
             fill: false,
             interactive: false,
           }}
