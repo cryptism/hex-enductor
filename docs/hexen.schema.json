@@ -33,6 +33,20 @@
           ],
           "additionalProperties": false,
           "description": "A project's content source: an Obsidian vault."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inline"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "description": "A project's content source: no external vault — each Location carries its own title/body directly in this file."
         }
       ],
       "description": "Where a project's location content (title/summary/body) is resolved from."
@@ -299,9 +313,32 @@
                     ],
                     "additionalProperties": false,
                     "description": "A single location's content: one file in the project's Obsidian vault."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "inline"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "default": "",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "body"
+                    ],
+                    "additionalProperties": false,
+                    "description": "A single location's content, written directly into the .hexen.yml — no vault file."
                   }
                 ],
-                "description": "A Location's title/summary/body always come from here, resolved at load time — never duplicated into .hexen.yml."
+                "description": "A Location's title/summary/body always come from here, resolved at load time — never duplicated elsewhere. Inline content is the one exception to 'never duplicated into .hexen.yml': there is nowhere else for it to live."
               },
               {
                 "type": "null"

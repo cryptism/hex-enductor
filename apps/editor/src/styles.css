@@ -148,6 +148,7 @@ body {
 }
 
 input,
+textarea,
 button {
   background: var(--ground);
   color: var(--ink);
@@ -155,6 +156,11 @@ button {
   border-radius: 4px;
   padding: 0.4rem 0.6rem;
   font: inherit;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 4.5rem;
 }
 
 button {

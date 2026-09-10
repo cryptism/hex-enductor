@@ -120,6 +120,62 @@ locations:
     expect(warnings).toEqual([]);
   });
 
+  test("accepts a project with no vault, using inline content throughout", () => {
+    const yaml = `
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content:
+  type: inline
+locations:
+  - id: town
+    content:
+      type: inline
+      title: The Town
+      body: A quiet crossroads.
+`;
+    const { project, warnings } = parseHexenProject(yaml);
+    expect(project.content).toEqual({ type: "inline" });
+    expect(project.locations[0]!.content).toEqual({
+      type: "inline",
+      title: "The Town",
+      body: "A quiet crossroads.",
+    });
+    expect(warnings).toEqual([]);
+  });
+
+  test("defaults an inline location's body to an empty string", () => {
+    const yaml = `
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+    content: { type: inline, title: Untitled }
+`;
+    const { project } = parseHexenProject(yaml);
+    expect(project.locations[0]!.content).toEqual({ type: "inline", title: "Untitled", body: "" });
+  });
+
+  test("allows inline and obsidian content to mix within one obsidian-backed project", () => {
+    const yaml = `
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: obsidian, vaultRoot: _vault }
+locations:
+  - id: town
+    content: { type: obsidian, ref: town.md }
+  - id: side-note
+    content: { type: inline, title: Side Note, body: Not worth its own vault file. }
+`;
+    const { project, warnings } = parseHexenProject(yaml);
+    expect(project.locations[0]!.content).toEqual({ type: "obsidian", ref: "town.md" });
+    expect(project.locations[1]!.content?.type).toBe("inline");
+    expect(warnings).toEqual([]);
+  });
+
   test("rejects an unrecognized grid type", () => {
     const yaml = `
 schemaVersion: 1

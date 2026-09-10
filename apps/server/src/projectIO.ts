@@ -1,8 +1,20 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { parseHexenProject, serializeHexenProject, type HexenProject } from "@hex-enductor/hexen-schema";
+import {
+  parseHexenProject,
+  serializeHexenProject,
+  type HexenProject,
+  type InlineLocationContent,
+} from "@hex-enductor/hexen-schema";
 import { createObsidianResolver } from "@hex-enductor/content-obsidian";
 import type { ResolvedContent } from "@hex-enductor/content-resolver";
+
+// Inline content needs no I/O and no resolver package of its own — it's
+// already exactly a ResolvedContent, just with the `type` discriminant
+// stripped off.
+function resolveInlineContent(content: InlineLocationContent): ResolvedContent {
+  return { title: content.title, body: content.body };
+}
 
 export interface OpenedProject {
   project: HexenProject;
@@ -20,25 +32,33 @@ export async function openProject(path: string): Promise<OpenedProject> {
   const resolvedContent: Record<string, ResolvedContent> = {};
   const resolveErrors: Record<string, string> = {};
 
-  if (project.content.type === "obsidian") {
-    const resolver = createObsidianResolver({
-      projectDir: dirname(path),
-      vaultRoot: project.content.vaultRoot,
-    });
+  // A Location's own content.type picks how it resolves, independent of
+  // the project's — an obsidian-backed project can still hold inline
+  // locations that don't warrant a vault file of their own.
+  const obsidianResolver =
+    project.content.type === "obsidian"
+      ? createObsidianResolver({ projectDir: dirname(path), vaultRoot: project.content.vaultRoot })
+      : null;
 
-    await Promise.all(
-      project.locations
-        .filter((location) => location.content !== null)
-        .map(async (location) => {
-          try {
-            // location.content is narrowed non-null by the filter above
-            resolvedContent[location.id] = await resolver.resolve(location.content!);
-          } catch (err) {
-            resolveErrors[location.id] = err instanceof Error ? err.message : String(err);
+  await Promise.all(
+    project.locations
+      .filter((location) => location.content !== null)
+      .map(async (location) => {
+        // location.content is narrowed non-null by the filter above
+        const content = location.content!;
+        try {
+          if (content.type === "inline") {
+            resolvedContent[location.id] = resolveInlineContent(content);
+          } else if (obsidianResolver) {
+            resolvedContent[location.id] = await obsidianResolver.resolve(content);
+          } else {
+            throw new Error(`Location "${location.id}" has obsidian content, but this project has no vault configured`);
           }
-        }),
-    );
-  }
+        } catch (err) {
+          resolveErrors[location.id] = err instanceof Error ? err.message : String(err);
+        }
+      }),
+  );
 
   return { project, warnings, resolvedContent, resolveErrors };
 }

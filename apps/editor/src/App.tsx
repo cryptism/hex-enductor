@@ -3,6 +3,7 @@ import { MapCanvas } from "@hex-enductor/map-core";
 import { useAppStore } from "./store.ts";
 import { trpc, serverUrl } from "./trpc.ts";
 import { LinkForm } from "./LinkForm.tsx";
+import { LocationContentForm } from "./LocationContentForm.tsx";
 import { getRecentProjects } from "./recentProjects.ts";
 import { BrandMark } from "./Logo.tsx";
 import { LoadingScreen } from "./LoadingScreen.tsx";
@@ -126,6 +127,9 @@ function App() {
   const saveLink = trpc.saveLink.useMutation({
     onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
   });
+  const saveLocationContent = trpc.saveLocationContent.useMutation({
+    onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
+  });
 
   const project = query.data?.project;
 
@@ -165,7 +169,24 @@ function App() {
       mainContent = (
         <div className="app">
           <aside className="sidebar">
-            <h2>{query.data?.resolvedContent[currentLocation.id]?.title ?? currentLocation.id}</h2>
+            {currentLocation.content === null || currentLocation.content.type === "inline" ? (
+              <LocationContentForm
+                key={currentLocation.id}
+                locationId={currentLocation.id}
+                title={query.data?.resolvedContent[currentLocation.id]?.title ?? ""}
+                body={query.data?.resolvedContent[currentLocation.id]?.body ?? ""}
+                saving={saveLocationContent.isPending}
+                onSave={(patch) =>
+                  saveLocationContent.mutate({
+                    path: projectPath,
+                    locationId: currentLocation.id,
+                    patch,
+                  })
+                }
+              />
+            ) : (
+              <h2>{query.data?.resolvedContent[currentLocation.id]?.title ?? currentLocation.id}</h2>
+            )}
             {currentLocation.id !== project.defaultLocation && (
               <button className="link-button" onClick={() => setCurrentLocation(project.defaultLocation)}>
                 ← {project.title}
