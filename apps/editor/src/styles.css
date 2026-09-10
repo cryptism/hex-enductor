@@ -232,6 +232,23 @@ body {
   float: right;
 }
 
+.sidebar-spaced {
+  margin-bottom: 1rem;
+}
+
+.location-browser input[type="text"] {
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.location-browser .browser {
+  max-height: 20rem;
+}
+
+.location-browser .link-list {
+  margin: 0;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

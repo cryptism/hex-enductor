@@ -7,6 +7,7 @@ import { AddLocationForm } from "./AddLocationForm.tsx";
 import { ConfigureGridForm } from "./ConfigureGridForm.tsx";
 import { ImageUpload } from "./ImageUpload.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
+import { LocationBrowser } from "./LocationBrowser.tsx";
 import { BrandMark } from "./Logo.tsx";
 import { LoadingScreen } from "./LoadingScreen.tsx";
 import type { OpenedProjectData } from "./storage/index.ts";
@@ -84,6 +85,10 @@ function App() {
   // regardless of editMode and isn't reset by any of the effects above.
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // Every Location in the project, filterable, independent of which
+  // map you're on — navigation, not a mutation, so no editMode gate.
+  const [browserOpen, setBrowserOpen] = useState(false);
+
   const [savingLink, setSavingLink] = useState(false);
   const [savingContent, setSavingContent] = useState(false);
   const [addingLocation, setAddingLocation] = useState(false);
@@ -157,6 +162,9 @@ function App() {
           <aside className="sidebar">
             <button type="button" className="project-switcher" onClick={() => setPickerOpen(true)}>
               {project.title}
+            </button>
+            <button type="button" className="link-button sidebar-spaced" onClick={() => setBrowserOpen(true)}>
+              Browse all locations…
             </button>
 
             <label className="mode-toggle">
@@ -376,6 +384,19 @@ function App() {
         <div className="modal-backdrop">
           <div className="modal-panel">
             <ProjectPicker onClose={() => setPickerOpen(false)} />
+          </div>
+        </div>
+      )}
+      {browserOpen && project && (
+        <div className="modal-backdrop">
+          <div className="modal-panel">
+            <LocationBrowser
+              project={project}
+              resolvedContent={data?.resolvedContent ?? {}}
+              currentLocationId={currentLocationId}
+              onSelect={setCurrentLocation}
+              onClose={() => setBrowserOpen(false)}
+            />
           </div>
         </div>
       )}
