@@ -369,7 +369,15 @@ function App() {
                   />
                 ) : (
                   <div className="location-heading">
-                    <h2>{linkTitles[selectedLink.target] ?? selectedLink.target}</h2>
+                    <h2 className="link-form-title">
+                      {findLinkIcon(selectedLink.icon) && (
+                        <span
+                          className="icon-swatch"
+                          dangerouslySetInnerHTML={{ __html: findLinkIcon(selectedLink.icon)!.svg }}
+                        />
+                      )}
+                      {linkTitles[selectedLink.target] ?? selectedLink.target}
+                    </h2>
                     <p className="location-body">{selectedLink.type}</p>
                   </div>
                 )}

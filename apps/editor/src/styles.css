@@ -587,6 +587,7 @@ h2 {
   display: inline-flex;
   flex-direction: column;
   font-family: var(--font-title);
+  font-weight: 600;
   font-size: 1.5rem;
   line-height: 1.02;
   text-transform: uppercase;
