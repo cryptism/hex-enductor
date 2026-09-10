@@ -21,6 +21,38 @@ afterAll(async () => {
   await rm(projectDir, { recursive: true, force: true });
 });
 
+describe("createProject", () => {
+  test("writes a minimal, valid inline-content project and opens it", async () => {
+    const path = join(projectDir, "new-realm.hexen.yml");
+    const result = await caller.createProject({ path, title: "New Realm", defaultLocationId: "town" });
+
+    expect(result.project).toEqual({
+      schemaVersion: 1,
+      title: "New Realm",
+      defaultLocation: "town",
+      content: { type: "inline" },
+      locations: [{ id: "town", grid: null, image: null, content: null, links: [] }],
+    });
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("refuses to overwrite an existing file", async () => {
+    const path = join(projectDir, "already-there.hexen.yml");
+    await caller.createProject({ path, title: "First", defaultLocationId: "town" });
+
+    await expect(caller.createProject({ path, title: "Second", defaultLocationId: "town" })).rejects.toThrow(
+      /already exists/,
+    );
+  });
+
+  test("rejects a save path whose directory doesn't exist", async () => {
+    const path = join(projectDir, "nowhere", "project.hexen.yml");
+    await expect(caller.createProject({ path, title: "New Realm", defaultLocationId: "town" })).rejects.toThrow(
+      /doesn't exist/,
+    );
+  });
+});
+
 describe("addLocationLink", () => {
   test("creates a new Location and links to it when the id doesn't exist yet", async () => {
     const path = await writeProject(`

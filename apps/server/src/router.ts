@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { z } from "zod";
-import { LinkSchema, InlineLocationContentSchema, GridSchema } from "@hex-enductor/hexen-schema";
+import { LinkSchema, InlineLocationContentSchema, GridSchema, type HexenProject } from "@hex-enductor/hexen-schema";
 import { router, publicProcedure } from "./trpc.ts";
 import { openProject, saveProject } from "./projectIO.ts";
 import { listDirectory } from "./browse.ts";
@@ -11,6 +13,37 @@ export const appRouter = router({
   openProject: publicProcedure.input(z.object({ path: z.string() })).query(({ input }) => {
     return openProject(input.path);
   }),
+
+  createProject: publicProcedure
+    .input(
+      z.object({
+        path: z.string(),
+        title: z.string().min(1),
+        defaultLocationId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (existsSync(input.path)) {
+        throw new Error(`"${input.path}" already exists`);
+      }
+      const dir = dirname(input.path);
+      if (!existsSync(dir)) {
+        throw new Error(`Directory "${dir}" doesn't exist`);
+      }
+
+      // No vault to choose or scaffold — inline content means a new
+      // project is immediately valid with nothing but a name.
+      const project: HexenProject = {
+        schemaVersion: 1,
+        title: input.title,
+        defaultLocation: input.defaultLocationId,
+        content: { type: "inline" },
+        locations: [{ id: input.defaultLocationId, grid: null, image: null, content: null, links: [] }],
+      };
+
+      await saveProject(input.path, project);
+      return openProject(input.path);
+    }),
 
   listDirectory: publicProcedure.input(z.object({ path: z.string().optional() })).query(({ input }) => {
     return listDirectory(input.path);
