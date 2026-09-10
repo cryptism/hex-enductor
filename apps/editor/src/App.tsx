@@ -139,8 +139,8 @@ function App() {
       );
 
       const selectedLink = currentLocation.links.find((l) => l.id === selectedLinkId);
-      // A selected link's own target location, if it has a grid of its own
-      // — i.e. it's not just a pin, it's a map you can click into.
+      // A selected link's own target location, if it has an image of its
+      // own — i.e. it's not just a pin, it's a map you can click into.
       const selectedTargetLocation = selectedLink
         ? project.locations.find((l) => l.id === selectedLink.id)
         : undefined;
@@ -332,23 +332,30 @@ function App() {
               />
             </aside>
           ) : (
-            editMode &&
             selectedLink && (
               <aside className="edit-panel">
-                <LinkForm
-                  key={selectedLink.id}
-                  link={selectedLink}
-                  title={linkTitles[selectedLink.id] ?? selectedLink.id}
-                  saving={savingLink}
-                  onSave={(patch) => {
-                    setSavingLink(true);
-                    storage
-                      .saveLink(currentLocation.id, selectedLink.id, patch as Partial<Link>)
-                      .then(setData)
-                      .finally(() => setSavingLink(false));
-                  }}
-                />
-                {selectedTargetLocation?.grid && (
+                {editMode ? (
+                  <LinkForm
+                    key={selectedLink.id}
+                    link={selectedLink}
+                    title={linkTitles[selectedLink.id] ?? selectedLink.id}
+                    saving={savingLink}
+                    onSave={(patch) => {
+                      setSavingLink(true);
+                      storage
+                        .saveLink(currentLocation.id, selectedLink.id, patch as Partial<Link>)
+                        .then(setData)
+                        .finally(() => setSavingLink(false));
+                    }}
+                  />
+                ) : (
+                  <div className="location-heading">
+                    <h2>{linkTitles[selectedLink.id] ?? selectedLink.id}</h2>
+                    <p className="location-body">{selectedLink.type}</p>
+                  </div>
+                )}
+                {/* Navigation, not a mutation — available in view mode too. */}
+                {selectedTargetLocation?.image && (
                   <button className="link-button" onClick={() => setCurrentLocation(selectedTargetLocation.id)}>
                     View map →
                   </button>
