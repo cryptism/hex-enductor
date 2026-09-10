@@ -1,8 +1,9 @@
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { Link } from "@hex-enductor/hexen-schema";
+import { IconPicker } from "./IconPicker.tsx";
 
 const LinkFormSchema = z.object({
   // Plain z.number(), not z.coerce.number(): register(..., { valueAsNumber:
@@ -40,6 +41,7 @@ export interface LinkFormProps {
 export function LinkForm({ link, title, onSave, saving }: LinkFormProps) {
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { isDirty, errors },
@@ -88,7 +90,13 @@ export function LinkForm({ link, title, onSave, saving }: LinkFormProps) {
       </label>
       <label>
         Icon
-        <input type="text" placeholder="(none)" {...register("icon")} />
+        <Controller
+          name="icon"
+          control={control}
+          render={({ field }) => (
+            <IconPicker value={field.value || undefined} onChange={(slug) => field.onChange(slug ?? "")} />
+          )}
+        />
       </label>
       <label>
         Color

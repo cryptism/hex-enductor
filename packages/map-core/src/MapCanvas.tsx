@@ -5,6 +5,7 @@ import type { Grid, ImageRef, Link, Point } from "@hex-enductor/hexen-schema";
 import { loadHexBasis, buildHexPolygons } from "./hexMath.ts";
 import { buildSquarePolygons } from "./squareMath.ts";
 import { pxToLatLng, polygonToLatLngs, latLngToPx } from "./coords.ts";
+import { findLinkIcon } from "./linkIcons.ts";
 import "leaflet/dist/leaflet.css";
 
 // Mounted only while the Add Location tool is active — has no
@@ -98,16 +99,23 @@ export function MapCanvas({
         .map((link) => {
           const color = link.color ?? DEFAULT_MARKER_COLOR;
           const isSelected = link.id === selectedLinkId;
+          const size = isSelected ? 20 : 16;
+          const glyph = findLinkIcon(link.icon)?.svg ?? "";
+          const glyphSize = Math.round(size * 0.65);
           const icon = divIcon({
             className: "",
             html: `<div style="
-              width: ${isSelected ? 20 : 16}px;
-              height: ${isSelected ? 20 : 16}px;
+              width: ${size}px;
+              height: ${size}px;
               border-radius: 50%;
               background: rgba(23,25,20,0.88);
               border: 2px solid ${color};
               box-shadow: 0 0 0 2px rgba(0,0,0,0.35);
-            "></div>`,
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: ${color};
+            ">${glyph.replace("<svg ", `<svg width="${glyphSize}" height="${glyphSize}" `)}</div>`,
             iconSize: [20, 20],
             iconAnchor: [10, 10],
           });

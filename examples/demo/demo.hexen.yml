@@ -36,7 +36,7 @@ locations:
         x: 220
         y: 240
         type: settlement
-        icon: tavern
+        icon: tavern-sign
         color: null
         hidden: false
       - id: notice-board-pin
@@ -44,7 +44,7 @@ locations:
         x: 260
         y: 190
         type: landmark
-        icon: notice
+        icon: wooden-sign
         color: null
         hidden: false
   - id: inn
