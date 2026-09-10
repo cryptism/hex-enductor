@@ -40,7 +40,7 @@ export function AddLocationForm({ onSave, onCancel, saving }: AddLocationFormPro
           type="text"
           value={type}
           onChange={(e) => setType(e.target.value)}
-          placeholder="e.g. settlement"
+          placeholder="e.g. npc, trap, chest, landmark…"
         />
       </label>
       <div className="form-actions">
