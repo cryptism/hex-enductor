@@ -1,6 +1,9 @@
 # Hex Enductor
 [___Spare a little greed!___](https://www.youtube.com/watch?v=pcEajscsyQ0)
 
+![](hex-enductor.png)
+
+
 __Hex Enductor__ is a Leaflet-based annotation and GM presentation tool for TTRPGs. It intends to support live, in-person play and supports on-the-fly editing of the mapped environment that syncs to pluggable content.
 
 WIP, alpha, and very very overly suited to mine own ends. Feel free to swing by with features, bugs, all that whatnot, hopefully what's been done here is worthy to someone, even in our most decrepit futures to which we look forward in horror, more often than occasional, at the sight of our own ghosts gouged out of us and playing silly buggers among themselves.
