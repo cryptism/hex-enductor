@@ -7,6 +7,10 @@ import {
   saveImage as applySaveImage,
   readImageSize,
 } from "@hex-enductor/project-ops";
+// Deep import, not the package's index.ts barrel — that one also pulls
+// in node:fs/node:path for the server-side resolver, which Vite can't
+// bundle for the browser. This file is pure (gray-matter only).
+import { parseObsidianNote } from "@hex-enductor/content-obsidian/src/parseNote.ts";
 import type { OpenedProjectData, ProjectStorage } from "./types.ts";
 
 async function findHexenFileHandle(dir: FileSystemDirectoryHandle): Promise<FileSystemFileHandle> {
@@ -38,22 +42,46 @@ function extensionFor(file: File): string | null {
   return m ? m[1]!.toLowerCase() : null;
 }
 
-// No vault reader in the browser yet (see issue #18) — an obsidian
-// Location resolves fine on the server, but here it can only report
-// why it can't: local mode has no filesystem access outside the one
-// folder the user granted.
-function resolveContent(project: HexenProject): Pick<OpenedProjectData, "resolvedContent" | "resolveErrors"> {
+// Mirrors node:path.join's collapsing of "." and empty segments, for
+// the one join (vaultRoot + a location's ref) this storage needs —
+// no node:path here, this file has to stay bundlable for the browser.
+function joinPath(...parts: string[]): string {
+  return parts
+    .join("/")
+    .split("/")
+    .filter((part) => part && part !== ".")
+    .join("/");
+}
+
+async function resolveContent(
+  dirHandle: FileSystemDirectoryHandle,
+  project: HexenProject,
+): Promise<Pick<OpenedProjectData, "resolvedContent" | "resolveErrors">> {
   const resolvedContent: OpenedProjectData["resolvedContent"] = {};
   const resolveErrors: OpenedProjectData["resolveErrors"] = {};
-  for (const location of project.locations) {
-    if (!location.content) continue;
-    if (location.content.type === "inline") {
-      resolvedContent[location.id] = { title: location.content.title, body: location.content.body };
-    } else {
-      resolveErrors[location.id] =
-        `Location "${location.id}" has obsidian content, but a browser-opened project can't read a vault yet.`;
-    }
-  }
+  const vaultRoot = project.content.type === "obsidian" ? project.content.vaultRoot : null;
+
+  await Promise.all(
+    project.locations
+      .filter((location) => location.content !== null)
+      .map(async (location) => {
+        const content = location.content!;
+        try {
+          if (content.type === "inline") {
+            resolvedContent[location.id] = { title: content.title, body: content.body };
+          } else if (vaultRoot !== null) {
+            const handle = await traverseToFile(dirHandle, joinPath(vaultRoot, content.ref), false);
+            const raw = await (await handle.getFile()).text();
+            resolvedContent[location.id] = parseObsidianNote(raw, content.ref);
+          } else {
+            throw new Error(`Location "${location.id}" has obsidian content, but this project has no vault configured`);
+          }
+        } catch (err) {
+          resolveErrors[location.id] = err instanceof Error ? err.message : String(err);
+        }
+      }),
+  );
+
   return { resolvedContent, resolveErrors };
 }
 
@@ -82,7 +110,7 @@ export function createLocalFsStorage(dirHandle: FileSystemDirectoryHandle): Proj
   async function open(): Promise<OpenedProjectData> {
     const handle = await getFileHandle();
     const { project, warnings } = parseHexenProject(await (await handle.getFile()).text());
-    return { project, warnings, ...resolveContent(project) };
+    return { project, warnings, ...(await resolveContent(dirHandle, project)) };
   }
 
   async function commit(mutate: (project: HexenProject) => HexenProject): Promise<OpenedProjectData> {

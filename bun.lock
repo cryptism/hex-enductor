@@ -18,6 +18,7 @@
       "name": "@hex-enductor/editor",
       "version": "0.0.0",
       "dependencies": {
+        "@hex-enductor/content-obsidian": "workspace:*",
         "@hex-enductor/content-resolver": "workspace:*",
         "@hex-enductor/hexen-schema": "workspace:*",
         "@hex-enductor/map-core": "workspace:*",

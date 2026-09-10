@@ -67,6 +67,22 @@ function fakeRoot(yamlText: string): FakeDirectoryHandle {
   return root;
 }
 
+function addFile(root: FakeDirectoryHandle, path: string, content: string): void {
+  const parts = path.split("/");
+  let dir = root;
+  for (let i = 0; i < parts.length - 1; i++) {
+    let next = dir.dirs.get(parts[i]!);
+    if (!next) {
+      next = new FakeDirectoryHandle(parts[i]!);
+      dir.dirs.set(parts[i]!, next);
+    }
+    dir = next;
+  }
+  const file = new FakeFileHandle(parts[parts.length - 1]!);
+  file.content = new TextEncoder().encode(content);
+  dir.files.set(parts[parts.length - 1]!, file);
+}
+
 const YAML = `
 schemaVersion: 1
 title: Test Realm
@@ -106,11 +122,36 @@ describe("createLocalFsStorage", () => {
     expect(data.warnings).toEqual([]);
   });
 
-  test("reports a resolveError for obsidian content instead of resolving it", async () => {
+  test("resolves obsidian content by reading the vault file through the directory handle", async () => {
+    const root = fakeRoot(YAML_WITH_OBSIDIAN);
+    addFile(root, "_vault/town.md", "---\ntitle: The Town\n---\nA quiet place.");
+    const storage = createLocalFsStorage(root as unknown as FileSystemDirectoryHandle);
+    const data = await storage.open();
+    expect(data.resolvedContent.town).toEqual({ title: "The Town", body: "A quiet place." });
+    expect(data.resolveErrors.town).toBeUndefined();
+  });
+
+  test("falls back to the filename when a vault note has no title in frontmatter", async () => {
+    const root = fakeRoot(YAML_WITH_OBSIDIAN);
+    addFile(root, "_vault/town.md", "No frontmatter here.");
+    const storage = createLocalFsStorage(root as unknown as FileSystemDirectoryHandle);
+    const data = await storage.open();
+    expect(data.resolvedContent.town).toEqual({ title: "town", body: "No frontmatter here." });
+  });
+
+  test("reports a resolveError when the vault file is missing", async () => {
     const storage = createLocalFsStorage(fakeRoot(YAML_WITH_OBSIDIAN) as unknown as FileSystemDirectoryHandle);
     const data = await storage.open();
     expect(data.resolvedContent.town).toBeUndefined();
-    expect(data.resolveErrors.town).toMatch(/can't read a vault/);
+    expect(data.resolveErrors.town).toMatch(/NotFoundError/);
+  });
+
+  test("reports a resolveError for obsidian Location content when the project has no vault configured", async () => {
+    const yaml = YAML_WITH_OBSIDIAN.replace("content: { type: obsidian, vaultRoot: _vault }", "content: { type: inline }");
+    const storage = createLocalFsStorage(fakeRoot(yaml) as unknown as FileSystemDirectoryHandle);
+    const data = await storage.open();
+    expect(data.resolvedContent.town).toBeUndefined();
+    expect(data.resolveErrors.town).toMatch(/no vault configured/);
   });
 
   test("saveLink writes the patch back to the file", async () => {
