@@ -6,7 +6,7 @@ import { LinkForm } from "./LinkForm.tsx";
 import { LocationContentForm } from "./LocationContentForm.tsx";
 import { AddLocationForm } from "./AddLocationForm.tsx";
 import { ConfigureGridForm } from "./ConfigureGridForm.tsx";
-import { getRecentProjects } from "./recentProjects.ts";
+import { ProjectPicker } from "./ProjectPicker.tsx";
 import { BrandMark } from "./Logo.tsx";
 import { LoadingScreen } from "./LoadingScreen.tsx";
 import type { Grid, Link, Point } from "@hex-enductor/hexen-schema";
@@ -21,160 +21,13 @@ function imageUrl(projectPath: string, file: string): string {
   return `${serverUrl()}/image?dir=${encodeURIComponent(dir)}&file=${encodeURIComponent(file)}`;
 }
 
-function joinPath(dir: string, name: string): string {
-  return dir.endsWith("/") ? `${dir}${name}` : `${dir}/${name}`;
-}
-
-function slugify(title: string): string {
-  return title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "location";
-}
-
-function DirectoryBrowser({ onOpen }: { onOpen: (path: string) => void }) {
-  const [browsePath, setBrowsePath] = useState<string | undefined>(undefined);
-  const listing = trpc.listDirectory.useQuery({ path: browsePath });
-
-  return (
-    <div className="browser">
-      {listing.isLoading && <p className="status">Loading…</p>}
-      {listing.isError && <p className="status error">{listing.error.message}</p>}
-      {listing.data && (
-        <>
-          <div className="browser-path">{listing.data.path}</div>
-          <ul className="browser-list">
-            {listing.data.parent !== null && (
-              <li>
-                <button onClick={() => setBrowsePath(listing.data!.parent!)}>.. (up)</button>
-              </li>
-            )}
-            {listing.data.entries.map((entry) => (
-              <li key={entry.name}>
-                <button
-                  onClick={() => {
-                    const full = joinPath(listing.data!.path, entry.name);
-                    if (entry.isDirectory) setBrowsePath(full);
-                    else onOpen(full);
-                  }}
-                >
-                  {entry.isDirectory ? `${entry.name}/` : entry.name}
-                </button>
-              </li>
-            ))}
-            {listing.data.entries.length === 0 && <li className="muted">Nothing to open here.</li>}
-          </ul>
-        </>
-      )}
-    </div>
-  );
-}
-
-function NewProjectForm({
-  onCreate,
-  saving,
-  error,
-}: {
-  onCreate: (values: { path: string; title: string }) => void;
-  saving: boolean;
-  error?: string;
-}) {
-  const [title, setTitle] = useState("");
-  const [path, setPath] = useState("");
-
-  const canCreate = title.trim().length > 0 && path.trim().length > 0;
-
-  return (
-    <form
-      className="link-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (canCreate) onCreate({ title: title.trim(), path: path.trim() });
-      }}
-    >
-      <label>
-        Title
-        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="My Realm" autoFocus />
-      </label>
-      <label>
-        Save as
-        <input
-          type="text"
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          placeholder="/path/to/my-realm.hexen.yml"
-        />
-      </label>
-      {error && <span className="field-error">{error}</span>}
-      <button type="submit" disabled={!canCreate || saving}>
-        {saving ? "Creating…" : "Create"}
-      </button>
-    </form>
-  );
-}
-
 function OpenProjectForm() {
-  const [pathInput, setPathInput] = useState("");
-  const [browsing, setBrowsing] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const openProject = useAppStore((s) => s.openProject);
-  const [recent] = useState(() => getRecentProjects());
-  const createProject = trpc.createProject.useMutation();
-
   return (
     <div className="open-project">
       <h1 className="brand-heading">
         <BrandMark size={64} />
       </h1>
-      <p>Open a .hexen.yml project by its absolute path.</p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (pathInput.trim()) openProject(pathInput.trim());
-        }}
-      >
-        <input
-          type="text"
-          value={pathInput}
-          onChange={(e) => setPathInput(e.target.value)}
-          placeholder="/path/to/project.hexen.yml"
-          autoFocus
-        />
-        <button type="submit">Open</button>
-      </form>
-
-      <button className="link-button" onClick={() => setBrowsing((b) => !b)}>
-        {browsing ? "Hide browser" : "Browse for a project…"}
-      </button>
-      {browsing && <DirectoryBrowser onOpen={openProject} />}
-
-      <button className="link-button" onClick={() => setCreating((c) => !c)}>
-        {creating ? "Cancel new project" : "New project…"}
-      </button>
-      {creating && (
-        <NewProjectForm
-          saving={createProject.isPending}
-          error={createProject.error?.message}
-          onCreate={(values) =>
-            createProject.mutate(
-              { path: values.path, title: values.title, defaultLocationId: slugify(values.title) },
-              { onSuccess: () => openProject(values.path) },
-            )
-          }
-        />
-      )}
-
-      {recent.length > 0 && (
-        <div className="recent-projects">
-          <h3>Recent</h3>
-          <ul>
-            {recent.map((path) => (
-              <li key={path}>
-                <button className="link-button" onClick={() => openProject(path)}>
-                  {path}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ProjectPicker />
     </div>
   );
 }
@@ -210,6 +63,11 @@ function App() {
     setConfiguringGrid(false);
     setDraftGrid(null);
   }, [currentLocationId, projectPath, editMode]);
+
+  // The landing screen's picker, reopened as a panel over the editor —
+  // switching projects, not editing this one, so it's available
+  // regardless of editMode and isn't reset by any of the effects above.
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const query = trpc.openProject.useQuery(
     { path: projectPath! },
@@ -271,6 +129,10 @@ function App() {
       mainContent = (
         <div className="app">
           <aside className="sidebar">
+            <button type="button" className="project-switcher" onClick={() => setPickerOpen(true)}>
+              {project.title}
+            </button>
+
             <label className="mode-toggle">
               <input type="checkbox" checked={editMode} onChange={(e) => setEditMode(e.target.checked)} />
               <span className="mode-toggle-track" aria-hidden="true" />
@@ -475,6 +337,13 @@ function App() {
     <>
       <LoadingScreen active={!project} />
       {mainContent}
+      {pickerOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-panel">
+            <ProjectPicker onClose={() => setPickerOpen(false)} />
+          </div>
+        </div>
+      )}
     </>
   );
 }

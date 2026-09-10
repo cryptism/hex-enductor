@@ -206,13 +206,46 @@ body {
   padding: 0 1rem;
 }
 
-.open-project form {
+.project-picker > form {
   display: flex;
   gap: 0.5rem;
 }
 
-.open-project input {
+.project-picker > form input {
   flex: 1;
+}
+
+.picker-close {
+  float: right;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 10, 6, 0.7);
+}
+
+.modal-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  max-width: 32rem;
+  width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.project-switcher {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 1rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
 }
 
 .browser {
