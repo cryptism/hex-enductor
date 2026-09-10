@@ -6,6 +6,16 @@
   --ink: #e6e3c9;
   --dim: #96998a;
   --accent: #c19a5f;
+
+  /* Official brand palette — the logo and its branded surfaces (loading
+     screen, start page) are keyed to these, independent of the dark
+     editor theme above. */
+  --color-ink: #14100e;
+  --color-vellum: #efe9dd;
+  --color-oxblood: #7d2b23;
+
+  --font-display: "IM Fell English", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 * {
@@ -80,7 +90,7 @@ body {
 }
 
 .browser-path {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.8em;
   color: var(--dim);
   padding: 0.4rem 0.6rem;
@@ -100,7 +110,7 @@ body {
   border: none;
   border-radius: 4px;
   padding: 0.3rem 0.5rem;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
 }
 
@@ -133,7 +143,7 @@ body {
 }
 
 .recent-projects .link-button {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 
@@ -213,7 +223,7 @@ button:disabled {
 }
 
 .link-form-id {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.8em;
   color: var(--dim);
   margin: -0.5rem 0 0.5rem;
@@ -235,4 +245,113 @@ button:disabled {
 .field-error {
   color: #e2604a;
   font-size: 0.85em;
+}
+
+/* ---- Titles ---- */
+
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* ---- Brand mark (logo + "Hex / Enductor" wordmark) ---- */
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.brand-mark img {
+  display: block;
+  flex-shrink: 0;
+  /* The mark's ink linework (#14100e) is drawn for a light vellum
+     ground; inverted it reads as a near-white line on our dark editor
+     surfaces instead of vanishing into them. */
+  filter: invert(1);
+}
+
+.wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1.02;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.brand-heading {
+  margin: 0 0 1.5rem;
+  font-weight: 400;
+}
+
+/* ---- Loading screen ---- */
+
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: var(--color-vellum);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 320ms ease;
+}
+
+.loading-screen.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.loading-grid {
+  display: grid;
+  justify-items: center;
+  gap: 2.25rem;
+}
+
+.loading-grid .brand-mark {
+  color: var(--color-ink);
+}
+
+.loading-grid .brand-mark img {
+  /* On its native vellum ground the mark needs no color correction. */
+  filter: none;
+}
+
+.loading-grid .wordmark {
+  color: var(--color-ink);
+}
+
+.throbber-row {
+  display: flex;
+  justify-content: center;
+}
+
+.throbber {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--color-oxblood) 22%, transparent);
+  border-top-color: var(--color-oxblood);
+  animation: throbber-spin 800ms linear infinite;
+}
+
+@keyframes throbber-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-screen {
+    transition-duration: 1ms;
+  }
+
+  .throbber {
+    animation-duration: 2.4s;
+  }
 }
