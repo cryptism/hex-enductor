@@ -74,6 +74,7 @@ export function MapCanvas({
       zoomSnap={0.25}
       minZoom={-4}
       maxZoom={3}
+      attributionControl={false}
     >
       {placing && onPlaceLocation && <ClickToPlace imageHeight={image.height} onPlace={onPlaceLocation} />}
       <ImageOverlay url={imageUrl} bounds={bounds} />
