@@ -31,14 +31,16 @@ locations:
       type: obsidian
       ref: town.md
     links:
-      - id: inn
+      - id: inn-front-door
+        target: inn
         x: 220
         y: 240
         type: settlement
         icon: tavern
         color: null
         hidden: false
-      - id: notice-board
+      - id: notice-board-pin
+        target: notice-board
         x: 260
         y: 190
         type: landmark

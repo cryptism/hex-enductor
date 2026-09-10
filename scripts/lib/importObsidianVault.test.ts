@@ -69,9 +69,17 @@ describe("buildHexenProject", () => {
     expect(map.grid?.type).toBe("hex");
     expect(map.image).toEqual(MAP_IMAGE);
     expect(map.content).toEqual({ type: "obsidian", ref: "Locations/Vilheim.md" });
-    expect(map.links).toEqual([
-      { id: "pentegil-manor", x: 10, y: 20, type: "settlement", icon: "village", color: null, hidden: false },
-    ]);
+    expect(map.links).toHaveLength(1);
+    expect(map.links[0]).toMatchObject({
+      target: "pentegil-manor",
+      x: 10,
+      y: 20,
+      type: "settlement",
+      icon: "village",
+      color: null,
+      hidden: false,
+    });
+    expect(typeof map.links[0]!.id).toBe("string");
 
     const pin = project.locations.find((l) => l.id === "pentegil-manor")!;
     expect(pin.grid).toBeNull();

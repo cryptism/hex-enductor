@@ -34,7 +34,8 @@ content: { type: obsidian, vaultRoot: _vault }
 locations:
   - id: town
     links:
-      - id: inn
+      - id: front-door
+        target: inn
         x: 1
         y: 2
         type: settlement
@@ -43,6 +44,32 @@ locations:
     const link = project.locations[0]!.links[0]!;
     expect(link.hidden).toBe(false);
     expect(link.color).toBeNull();
+  });
+
+  test("allows two links from the same parent to the same target — separate entrances", () => {
+    const yaml = `
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: obsidian, vaultRoot: _vault }
+locations:
+  - id: town
+    links:
+      - id: front-door
+        target: toll-house
+        x: 1
+        y: 2
+        type: waypoint
+      - id: back-door
+        target: toll-house
+        x: 5
+        y: 6
+        type: waypoint
+  - id: toll-house
+`;
+    const { project, warnings } = parseHexenProject(yaml);
+    expect(project.locations[0]!.links.map((l) => l.target)).toEqual(["toll-house", "toll-house"]);
+    expect(warnings).toEqual([]);
   });
 
   test("warns on a duplicate location id rather than throwing", () => {
@@ -72,7 +99,7 @@ locations:
     expect(warnings).toContain('defaultLocation "nowhere" isn\'t a known location id');
   });
 
-  test("warns on a dangling links[].id instead of failing the whole parse", () => {
+  test("warns on a dangling links[].target instead of failing the whole parse", () => {
     const yaml = `
 schemaVersion: 1
 title: Test Realm
@@ -81,7 +108,8 @@ content: { type: obsidian, vaultRoot: _vault }
 locations:
   - id: town
     links:
-      - id: ghost-town
+      - id: pin-1
+        target: ghost-town
         x: 0
         y: 0
         type: settlement
@@ -89,7 +117,7 @@ locations:
     const { project, warnings } = parseHexenProject(yaml);
     // The project itself still parsed — this is the load-bearing part of
     // "warn, don't fail": a dangling reference doesn't sink the file.
-    expect(project.locations[0]!.links[0]!.id).toBe("ghost-town");
+    expect(project.locations[0]!.links[0]!.target).toBe("ghost-town");
     expect(warnings).toContain('Location "town" links to unknown location id "ghost-town"');
   });
 

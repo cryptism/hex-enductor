@@ -87,7 +87,7 @@ export const appRouter = router({
       z.object({
         path: z.string(),
         parentLocationId: z.string(),
-        locationId: z.string().min(1),
+        targetLocationId: z.string().min(1),
         x: z.number(),
         y: z.number(),
         type: z.string().min(1),
@@ -95,7 +95,7 @@ export const appRouter = router({
     )
     .mutation(async ({ input }) => {
       const { project } = await openProject(input.path);
-      applyAddLocationLink(project, input.parentLocationId, input.locationId, input.x, input.y, input.type);
+      applyAddLocationLink(project, input.parentLocationId, input.targetLocationId, input.x, input.y, input.type);
       await saveProject(input.path, project);
       return openProject(input.path);
     }),

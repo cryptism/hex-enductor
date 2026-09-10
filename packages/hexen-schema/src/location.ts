@@ -17,7 +17,12 @@ export type ImageRef = z.infer<typeof ImageRefSchema>;
 
 export const LinkSchema = z
   .object({
-    id: z.string().describe("The Location this pin points at."),
+    id: z
+      .string()
+      .describe(
+        "This pin's own identity, stable across edits and independent of what it points at — so a Location can be the target of more than one Link (e.g. a front and back door into the same building).",
+      ),
+    target: z.string().describe("The Location this pin points at."),
     x: z.number(),
     y: z.number(),
     type: z.string().describe("Marker type, e.g. settlement/ruin/landmark/hazard/waypoint."),
@@ -26,7 +31,7 @@ export const LinkSchema = z
     hidden: z.boolean().default(false),
   })
   .describe(
-    "A pin on a parent Location's map: position and display only, never a title or summary — those live on the referenced Location's own content. See parseHexenProject in ./index.ts for how a dangling id is handled.",
+    "A pin on a parent Location's map: position and display only, never a title or summary — those live on the target Location's own content. See parseHexenProject in ./index.ts for how a dangling target is handled.",
   );
 export type Link = z.infer<typeof LinkSchema>;
 

@@ -67,14 +67,16 @@ locations:
     const result = await caller.addLocationLink({
       path,
       parentLocationId: "town",
-      locationId: "old-mill",
+      targetLocationId: "old-mill",
       x: 12,
       y: 34,
       type: "landmark",
     });
 
     const town = result.project.locations.find((l) => l.id === "town")!;
-    expect(town.links).toEqual([{ id: "old-mill", x: 12, y: 34, type: "landmark", color: null, hidden: false }]);
+    expect(town.links).toHaveLength(1);
+    expect(town.links[0]).toMatchObject({ target: "old-mill", x: 12, y: 34, type: "landmark", color: null, hidden: false });
+    expect(typeof town.links[0]!.id).toBe("string");
 
     const mill = result.project.locations.find((l) => l.id === "old-mill");
     expect(mill).toEqual({ id: "old-mill", grid: null, image: null, content: null, links: [] });
@@ -95,7 +97,7 @@ locations:
     const result = await caller.addLocationLink({
       path,
       parentLocationId: "town",
-      locationId: "inn",
+      targetLocationId: "inn",
       x: 5,
       y: 5,
       type: "settlement",
@@ -103,10 +105,10 @@ locations:
 
     expect(result.project.locations.filter((l) => l.id === "inn")).toHaveLength(1);
     const town = result.project.locations.find((l) => l.id === "town")!;
-    expect(town.links.map((l) => l.id)).toEqual(["inn"]);
+    expect(town.links.map((l) => l.target)).toEqual(["inn"]);
   });
 
-  test("refuses a second link to the same target from the same parent", async () => {
+  test("allows a second link from the same parent to the same target — separate entrances", async () => {
     const path = await writeProject(`
 schemaVersion: 1
 title: Test Realm
@@ -116,15 +118,25 @@ locations:
   - id: town
     content: { type: inline, title: The Town, body: "" }
     links:
-      - id: inn
+      - id: front-door
+        target: inn
         x: 1
         y: 1
         type: settlement
   - id: inn
 `);
-    await expect(
-      caller.addLocationLink({ path, parentLocationId: "town", locationId: "inn", x: 9, y: 9, type: "settlement" }),
-    ).rejects.toThrow(/already has a link/);
+    const result = await caller.addLocationLink({
+      path,
+      parentLocationId: "town",
+      targetLocationId: "inn",
+      x: 9,
+      y: 9,
+      type: "settlement",
+    });
+    const town = result.project.locations.find((l) => l.id === "town")!;
+    const linksToInn = town.links.filter((l) => l.target === "inn");
+    expect(linksToInn).toHaveLength(2);
+    expect(new Set(linksToInn.map((l) => l.id)).size).toBe(2);
   });
 
   test("rejects an unknown parent location", async () => {
@@ -138,7 +150,14 @@ locations:
     content: { type: inline, title: The Town, body: "" }
 `);
     await expect(
-      caller.addLocationLink({ path, parentLocationId: "nowhere", locationId: "inn", x: 0, y: 0, type: "settlement" }),
+      caller.addLocationLink({
+        path,
+        parentLocationId: "nowhere",
+        targetLocationId: "inn",
+        x: 0,
+        y: 0,
+        type: "settlement",
+      }),
     ).rejects.toThrow(/No location "nowhere"/);
   });
 });

@@ -140,14 +140,14 @@ function App() {
       mainContent = <div className="status error">Unknown location "{currentLocationId}"</div>;
     } else {
       const linkTitles = Object.fromEntries(
-        currentLocation.links.map((link) => [link.id, data?.resolvedContent[link.id]?.title ?? link.id]),
+        currentLocation.links.map((link) => [link.target, data?.resolvedContent[link.target]?.title ?? link.target]),
       );
 
       const selectedLink = currentLocation.links.find((l) => l.id === selectedLinkId);
       // A selected link's own target location, if it has an image of its
       // own — i.e. it's not just a pin, it's a map you can click into.
       const selectedTargetLocation = selectedLink
-        ? project.locations.find((l) => l.id === selectedLink.id)
+        ? project.locations.find((l) => l.id === selectedLink.target)
         : undefined;
 
       const warnings = data?.warnings ?? [];
@@ -261,7 +261,7 @@ function App() {
                     className={link.id === selectedLinkId ? "selected" : ""}
                     onClick={() => selectLink(link.id)}
                   >
-                    {linkTitles[link.id]}
+                    {linkTitles[link.target]}
                     {link.hidden ? " (hidden)" : ""}
                   </button>
                 </li>
@@ -346,7 +346,7 @@ function App() {
                   <LinkForm
                     key={selectedLink.id}
                     link={selectedLink}
-                    title={linkTitles[selectedLink.id] ?? selectedLink.id}
+                    title={linkTitles[selectedLink.target] ?? selectedLink.target}
                     saving={savingLink}
                     onSave={(patch) => {
                       setSavingLink(true);
@@ -358,7 +358,7 @@ function App() {
                   />
                 ) : (
                   <div className="location-heading">
-                    <h2>{linkTitles[selectedLink.id] ?? selectedLink.id}</h2>
+                    <h2>{linkTitles[selectedLink.target] ?? selectedLink.target}</h2>
                     <p className="location-body">{selectedLink.type}</p>
                   </div>
                 )}

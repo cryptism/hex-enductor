@@ -21,7 +21,7 @@ function fixture(): HexenProject {
         grid: null,
         image: null,
         content: { type: "inline", title: "The Town", body: "" },
-        links: [{ id: "inn", x: 1, y: 1, type: "settlement", color: null, hidden: false }],
+        links: [{ id: "front-door", target: "inn", x: 1, y: 1, type: "settlement", color: null, hidden: false }],
       },
       { id: "inn", grid: null, image: null, content: null, links: [] },
       { id: "well", grid: null, image: null, content: null, links: [] },
@@ -43,9 +43,10 @@ describe("createMinimalProject", () => {
 
 describe("saveLink", () => {
   test("merges a patch into the matching link", () => {
-    const project = saveLink(fixture(), "town", "inn", { x: 9, hidden: true });
+    const project = saveLink(fixture(), "town", "front-door", { x: 9, hidden: true });
     expect(project.locations[0]!.links[0]).toEqual({
-      id: "inn",
+      id: "front-door",
+      target: "inn",
       x: 9,
       y: 1,
       type: "settlement",
@@ -55,7 +56,7 @@ describe("saveLink", () => {
   });
 
   test("throws on an unknown location", () => {
-    expect(() => saveLink(fixture(), "nowhere", "inn", {})).toThrow(/No location "nowhere"/);
+    expect(() => saveLink(fixture(), "nowhere", "front-door", {})).toThrow(/No location "nowhere"/);
   });
 
   test("throws on an unknown link", () => {
@@ -84,14 +85,9 @@ describe("saveLocationContent", () => {
 describe("addLocationLink", () => {
   test("creates a new Location and links to it when the id doesn't exist yet", () => {
     const project = addLocationLink(fixture(), "town", "old-mill", 5, 6, "landmark");
-    expect(project.locations[0]!.links).toContainEqual({
-      id: "old-mill",
-      x: 5,
-      y: 6,
-      type: "landmark",
-      color: null,
-      hidden: false,
-    });
+    const link = project.locations[0]!.links.find((l) => l.target === "old-mill");
+    expect(link).toMatchObject({ target: "old-mill", x: 5, y: 6, type: "landmark", color: null, hidden: false });
+    expect(typeof link?.id).toBe("string");
     expect(project.locations.find((l) => l.id === "old-mill")).toEqual({
       id: "old-mill",
       grid: null,
@@ -113,8 +109,15 @@ describe("addLocationLink", () => {
     });
   });
 
-  test("refuses a second link to the same target from the same parent", () => {
-    expect(() => addLocationLink(fixture(), "town", "inn", 2, 2, "settlement")).toThrow(/already has a link/);
+  test("allows a second link from the same parent to the same target — separate entrances", () => {
+    // e.g. a front and back door into the same toll house: two pins on
+    // the parent's map, both targeting "inn", each with its own id and
+    // position.
+    const project = addLocationLink(fixture(), "town", "inn", 9, 9, "settlement");
+    const linksToInn = project.locations[0]!.links.filter((l) => l.target === "inn");
+    expect(linksToInn).toHaveLength(2);
+    expect(new Set(linksToInn.map((l) => l.id)).size).toBe(2);
+    expect(project.locations.filter((l) => l.id === "inn")).toHaveLength(1);
   });
 });
 

@@ -62,25 +62,26 @@ export function saveLocationContent(
 export function addLocationLink(
   project: HexenProject,
   parentLocationId: string,
-  locationId: string,
+  targetLocationId: string,
   x: number,
   y: number,
   type: string,
 ): HexenProject {
   const parent = findLocation(project, parentLocationId);
-  if (parent.links.some((l) => l.id === locationId)) {
-    throw new Error(`"${parentLocationId}" already has a link to "${locationId}"`);
-  }
 
   // The target might be a brand-new place, or an existing Location
   // that just didn't have a pin on this particular map yet — both are
   // the same operation, adding a Link, so only create the Location
   // itself when it doesn't already exist.
-  if (!project.locations.some((l) => l.id === locationId)) {
-    project.locations.push({ id: locationId, grid: null, image: null, content: null, links: [] });
+  if (!project.locations.some((l) => l.id === targetLocationId)) {
+    project.locations.push({ id: targetLocationId, grid: null, image: null, content: null, links: [] });
   }
 
-  parent.links.push({ id: locationId, x, y, type, color: null, hidden: false });
+  // A Link's own id is independent of its target on purpose — a
+  // Location can be the target of more than one Link from the same
+  // (or a different) parent, e.g. a front and back door into the same
+  // building, each its own pin at its own position.
+  parent.links.push({ id: crypto.randomUUID(), target: targetLocationId, x, y, type, color: null, hidden: false });
   return project;
 }
 

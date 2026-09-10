@@ -29,7 +29,7 @@ export interface ProjectStorage {
   ): Promise<OpenedProjectData>;
   addLocationLink(
     parentLocationId: string,
-    locationId: string,
+    targetLocationId: string,
     x: number,
     y: number,
     type: string,

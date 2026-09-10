@@ -71,7 +71,7 @@ export function LinkForm({ link, title, onSave, saving }: LinkFormProps) {
   return (
     <form onSubmit={submit} className="link-form">
       <h3>{title}</h3>
-      <p className="link-form-id">{link.id}</p>
+      <p className="link-form-id">→ {link.target}</p>
 
       <label>
         X

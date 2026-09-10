@@ -41,9 +41,9 @@ function validateReferences(project: HexenProject): string[] {
 
   for (const location of project.locations) {
     for (const link of location.links) {
-      if (!seenIds.has(link.id)) {
+      if (!seenIds.has(link.target)) {
         warnings.push(
-          `Location "${location.id}" links to unknown location id "${link.id}"`,
+          `Location "${location.id}" links to unknown location id "${link.target}"`,
         );
       }
     }

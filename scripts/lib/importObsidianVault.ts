@@ -155,7 +155,8 @@ export function buildHexenProject(entries: VaultEntry[], opts: BuildOptions): Bu
       continue;
     }
     links.push({
-      id,
+      id: crypto.randomUUID(),
+      target: id,
       x: fm["map-x"] as number,
       y: fm["map-y"] as number,
       type: typeof fm["map-type"] === "string" ? fm["map-type"] : "waypoint",

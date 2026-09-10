@@ -76,7 +76,8 @@ locations:
   - id: town
     content: { type: inline, title: The Town, body: "" }
     links:
-      - id: inn
+      - id: front-door
+        target: inn
         x: 1
         y: 1
         type: settlement
@@ -115,7 +116,7 @@ describe("createLocalFsStorage", () => {
   test("saveLink writes the patch back to the file", async () => {
     const root = fakeRoot(YAML);
     const storage = createLocalFsStorage(root as unknown as FileSystemDirectoryHandle);
-    const data = await storage.saveLink("town", "inn", { hidden: true });
+    const data = await storage.saveLink("town", "front-door", { hidden: true });
     expect(data.project.locations[0]!.links[0]!.hidden).toBe(true);
 
     // and it's really on disk (the fake's disk), not just in memory
@@ -133,7 +134,7 @@ describe("createLocalFsStorage", () => {
     const storage = createLocalFsStorage(fakeRoot(YAML) as unknown as FileSystemDirectoryHandle);
     const data = await storage.addLocationLink("town", "old-mill", 5, 6, "landmark");
     expect(data.project.locations.find((l) => l.id === "old-mill")).toBeTruthy();
-    expect(data.project.locations[0]!.links.map((l) => l.id)).toContain("old-mill");
+    expect(data.project.locations[0]!.links.map((l) => l.target)).toContain("old-mill");
   });
 
   test("saveGrid sets and clears the grid", async () => {

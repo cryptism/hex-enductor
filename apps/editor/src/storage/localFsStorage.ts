@@ -109,8 +109,8 @@ export function createLocalFsStorage(dirHandle: FileSystemDirectoryHandle): Proj
       return commit((project) => applySaveLocationContent(project, locationId, patch));
     },
 
-    addLocationLink(parentLocationId, locationId, x, y, type) {
-      return commit((project) => applyAddLocationLink(project, parentLocationId, locationId, x, y, type));
+    addLocationLink(parentLocationId, targetLocationId, x, y, type) {
+      return commit((project) => applyAddLocationLink(project, parentLocationId, targetLocationId, x, y, type));
     },
 
     saveGrid(locationId, grid) {

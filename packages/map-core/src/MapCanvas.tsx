@@ -25,7 +25,7 @@ export interface MapCanvasProps {
   /** Show the grid overlay at all — a view toggle, independent of whether `grid` itself is configured. */
   gridVisible?: boolean;
   links: Link[];
-  /** link.id -> the referenced Location's resolved title (a Link never carries its own title — see @hex-enductor/hexen-schema). */
+  /** link.target -> the referenced Location's resolved title (a Link never carries its own title — see @hex-enductor/hexen-schema). */
   linkTitles: Record<string, string>;
   selectedLinkId?: string;
   onSelectLink?: (linkId: string) => void;
@@ -125,7 +125,7 @@ export function MapCanvas({
               }
             >
               <Popup>
-                <strong>{linkTitles[link.id] ?? link.id}</strong>
+                <strong>{linkTitles[link.target] ?? link.target}</strong>
                 <br />
                 <span style={{ opacity: 0.7 }}>{link.type}</span>
               </Popup>

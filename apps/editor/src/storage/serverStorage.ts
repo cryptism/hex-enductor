@@ -39,8 +39,8 @@ export function createServerStorage(path: string): ProjectStorage {
       return trpcClient.saveLocationContent.mutate({ path, locationId, patch });
     },
 
-    addLocationLink(parentLocationId, locationId, x, y, type) {
-      return trpcClient.addLocationLink.mutate({ path, parentLocationId, locationId, x, y, type });
+    addLocationLink(parentLocationId, targetLocationId, x, y, type) {
+      return trpcClient.addLocationLink.mutate({ path, parentLocationId, targetLocationId, x, y, type });
     },
 
     saveGrid(locationId, grid) {

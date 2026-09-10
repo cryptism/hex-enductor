@@ -353,6 +353,10 @@
               "properties": {
                 "id": {
                   "type": "string",
+                  "description": "This pin's own identity, stable across edits and independent of what it points at — so a Location can be the target of more than one Link (e.g. a front and back door into the same building)."
+                },
+                "target": {
+                  "type": "string",
                   "description": "The Location this pin points at."
                 },
                 "x": {
@@ -382,6 +386,7 @@
               },
               "required": [
                 "id",
+                "target",
                 "x",
                 "y",
                 "type",
@@ -389,7 +394,7 @@
                 "hidden"
               ],
               "additionalProperties": false,
-              "description": "A pin on a parent Location's map: position and display only, never a title or summary — those live on the referenced Location's own content. See parseHexenProject in ./index.ts for how a dangling id is handled."
+              "description": "A pin on a parent Location's map: position and display only, never a title or summary — those live on the target Location's own content. See parseHexenProject in ./index.ts for how a dangling target is handled."
             }
           }
         },
