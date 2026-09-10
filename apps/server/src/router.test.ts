@@ -110,3 +110,61 @@ locations:
     ).rejects.toThrow(/No location "nowhere"/);
   });
 });
+
+describe("saveGrid", () => {
+  test("sets a grid on a location that had none", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+    content: { type: inline, title: The Town, body: "" }
+`);
+    const grid = {
+      type: "hex" as const,
+      origin: { x: 200, y: 200 },
+      b1: { x: 60, y: 0 },
+      b2: { x: 30, y: 52 },
+      style: { color: "#c19a5f", weight: 1, opacity: 0.45 },
+    };
+    const result = await caller.saveGrid({ path, locationId: "town", grid });
+
+    expect(result.project.locations[0]!.grid).toEqual(grid);
+  });
+
+  test("clears a grid back to null", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+    content: { type: inline, title: The Town, body: "" }
+    grid:
+      type: square
+      origin: { x: 0, y: 0 }
+      cellSize: { x: 32, y: 32 }
+      style: { color: "#fff" }
+`);
+    const result = await caller.saveGrid({ path, locationId: "town", grid: null });
+
+    expect(result.project.locations[0]!.grid).toBeNull();
+  });
+
+  test("rejects an unknown location", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+`);
+    await expect(caller.saveGrid({ path, locationId: "nowhere", grid: null })).rejects.toThrow(
+      /No location "nowhere"/,
+    );
+  });
+});

@@ -5,10 +5,11 @@ import { trpc, serverUrl } from "./trpc.ts";
 import { LinkForm } from "./LinkForm.tsx";
 import { LocationContentForm } from "./LocationContentForm.tsx";
 import { AddLocationForm } from "./AddLocationForm.tsx";
+import { ConfigureGridForm } from "./ConfigureGridForm.tsx";
 import { getRecentProjects } from "./recentProjects.ts";
 import { BrandMark } from "./Logo.tsx";
 import { LoadingScreen } from "./LoadingScreen.tsx";
-import type { Link, Point } from "@hex-enductor/hexen-schema";
+import type { Grid, Link, Point } from "@hex-enductor/hexen-schema";
 
 function dirname(path: string): string {
   const i = path.lastIndexOf("/");
@@ -134,6 +135,17 @@ function App() {
     if (!placingLocation) setPendingPoint(null);
   }, [placingLocation]);
 
+  // Configure Grid is a command, not a tool: opening it hands MapCanvas
+  // a draft grid to render live, and only saveGrid.mutate on Apply
+  // commits it. Also local, not store state, for the same reason as
+  // pendingPoint above.
+  const [configuringGrid, setConfiguringGrid] = useState(false);
+  const [draftGrid, setDraftGrid] = useState<Grid | null>(null);
+  useEffect(() => {
+    setConfiguringGrid(false);
+    setDraftGrid(null);
+  }, [currentLocationId, projectPath, editMode]);
+
   const query = trpc.openProject.useQuery(
     { path: projectPath! },
     { enabled: projectPath !== null },
@@ -146,6 +158,9 @@ function App() {
     onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
   });
   const addLocationLink = trpc.addLocationLink.useMutation({
+    onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
+  });
+  const saveGrid = trpc.saveGrid.useMutation({
     onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
   });
 
@@ -201,9 +216,27 @@ function App() {
               <button
                 type="button"
                 className={`tool-button${placingLocation ? " active" : ""}`}
-                onClick={() => setPlacingLocation(!placingLocation)}
+                onClick={() => {
+                  setConfiguringGrid(false);
+                  setDraftGrid(null);
+                  setPlacingLocation(!placingLocation);
+                }}
               >
                 {placingLocation ? "Click the map…" : "Add Location"}
+              </button>
+            )}
+
+            {editMode && currentLocation.image && (
+              <button
+                type="button"
+                className="tool-button"
+                onClick={() => {
+                  setPlacingLocation(false);
+                  setDraftGrid(currentLocation.grid);
+                  setConfiguringGrid(true);
+                }}
+              >
+                Configure grid…
               </button>
             )}
 
@@ -269,18 +302,18 @@ function App() {
           </aside>
 
           <main className="map-area">
-            {currentLocation.grid && currentLocation.image ? (
+            {currentLocation.image ? (
               <>
                 <MapCanvas
                   image={currentLocation.image}
                   imageUrl={imageUrl(projectPath, currentLocation.image.file)}
-                  grid={currentLocation.grid}
-                  gridVisible={gridVisible}
+                  grid={configuringGrid ? draftGrid : currentLocation.grid}
+                  gridVisible={gridVisible || configuringGrid}
                   links={currentLocation.links}
                   linkTitles={linkTitles}
                   selectedLinkId={selectedLinkId ?? undefined}
                   onSelectLink={selectLink}
-                  placing={placingLocation}
+                  placing={placingLocation && !configuringGrid}
                   onPlaceLocation={setPendingPoint}
                 />
                 <label className="grid-toggle">
@@ -293,11 +326,36 @@ function App() {
                 </label>
               </>
             ) : (
-              <div className="status">"{currentLocation.id}" has no grid/image — nothing to render.</div>
+              <div className="status">"{currentLocation.id}" has no image — nothing to render.</div>
             )}
           </main>
 
-          {placingLocation && pendingPoint ? (
+          {configuringGrid && currentLocation.image ? (
+            <aside className="edit-panel">
+              <ConfigureGridForm
+                key={currentLocation.id}
+                initialGrid={draftGrid}
+                image={currentLocation.image}
+                onPreview={setDraftGrid}
+                saving={saveGrid.isPending}
+                onApply={(grid) =>
+                  saveGrid.mutate(
+                    { path: projectPath, locationId: currentLocation.id, grid },
+                    {
+                      onSuccess: () => {
+                        setConfiguringGrid(false);
+                        setDraftGrid(null);
+                      },
+                    },
+                  )
+                }
+                onCancel={() => {
+                  setConfiguringGrid(false);
+                  setDraftGrid(null);
+                }}
+              />
+            </aside>
+          ) : placingLocation && pendingPoint ? (
             <aside className="edit-panel">
               <AddLocationForm
                 saving={addLocationLink.isPending}

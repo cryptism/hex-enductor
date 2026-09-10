@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LinkSchema, InlineLocationContentSchema } from "@hex-enductor/hexen-schema";
+import { LinkSchema, InlineLocationContentSchema, GridSchema } from "@hex-enductor/hexen-schema";
 import { router, publicProcedure } from "./trpc.ts";
 import { openProject, saveProject } from "./projectIO.ts";
 import { listDirectory } from "./browse.ts";
@@ -113,6 +113,28 @@ export const appRouter = router({
         color: null,
         hidden: false,
       });
+
+      await saveProject(input.path, project);
+      return openProject(input.path);
+    }),
+
+  saveGrid: publicProcedure
+    .input(
+      z.object({
+        path: z.string(),
+        locationId: z.string(),
+        grid: GridSchema.nullable(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { project } = await openProject(input.path);
+
+      const location = project.locations.find((l) => l.id === input.locationId);
+      if (!location) {
+        throw new Error(`No location "${input.locationId}" in ${input.path}`);
+      }
+
+      location.grid = input.grid;
 
       await saveProject(input.path, project);
       return openProject(input.path);
