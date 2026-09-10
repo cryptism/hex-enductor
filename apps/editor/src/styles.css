@@ -15,6 +15,7 @@
   --color-oxblood: #7d2b23;
 
 
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-title: 'Cormorant Garamond', ui-serif, Garamond, serif;
   --font-display: "IM Fell English", ui-serif, Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -34,7 +35,7 @@ body,
 body {
   background: var(--ground);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .app {
