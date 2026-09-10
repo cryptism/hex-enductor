@@ -11,10 +11,15 @@ interface AppState {
   // and whatever tools land later) behind an explicit switch, off by
   // default — reading a map at the table shouldn't risk changing it.
   editMode: boolean;
+  // A view toggle, not a safety gate — unlike editMode this carries
+  // across projects/locations rather than resetting, same as flipping
+  // "show rulers" would.
+  gridVisible: boolean;
   openProject: (path: string) => void;
   setCurrentLocation: (id: string | null) => void;
   selectLink: (id: string | null) => void;
   setEditMode: (editMode: boolean) => void;
+  setGridVisible: (gridVisible: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -22,6 +27,7 @@ export const useAppStore = create<AppState>((set) => ({
   currentLocationId: null,
   selectedLinkId: null,
   editMode: false,
+  gridVisible: true,
   openProject: (path) => {
     addRecentProject(path);
     set({ projectPath: path, currentLocationId: null, selectedLinkId: null, editMode: false });
@@ -29,4 +35,5 @@ export const useAppStore = create<AppState>((set) => ({
   setCurrentLocation: (id) => set({ currentLocationId: id, selectedLinkId: null }),
   selectLink: (id) => set({ selectedLinkId: id }),
   setEditMode: (editMode) => set({ editMode, selectedLinkId: null }),
+  setGridVisible: (gridVisible) => set({ gridVisible }),
 }));

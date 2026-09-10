@@ -117,9 +117,11 @@ function App() {
   const currentLocationId = useAppStore((s) => s.currentLocationId);
   const selectedLinkId = useAppStore((s) => s.selectedLinkId);
   const editMode = useAppStore((s) => s.editMode);
+  const gridVisible = useAppStore((s) => s.gridVisible);
   const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
   const selectLink = useAppStore((s) => s.selectLink);
   const setEditMode = useAppStore((s) => s.setEditMode);
+  const setGridVisible = useAppStore((s) => s.setGridVisible);
 
   const query = trpc.openProject.useQuery(
     { path: projectPath! },
@@ -244,15 +246,26 @@ function App() {
 
           <main className="map-area">
             {currentLocation.grid && currentLocation.image ? (
-              <MapCanvas
-                image={currentLocation.image}
-                imageUrl={imageUrl(projectPath, currentLocation.image.file)}
-                grid={currentLocation.grid}
-                links={currentLocation.links}
-                linkTitles={linkTitles}
-                selectedLinkId={selectedLinkId ?? undefined}
-                onSelectLink={selectLink}
-              />
+              <>
+                <MapCanvas
+                  image={currentLocation.image}
+                  imageUrl={imageUrl(projectPath, currentLocation.image.file)}
+                  grid={currentLocation.grid}
+                  gridVisible={gridVisible}
+                  links={currentLocation.links}
+                  linkTitles={linkTitles}
+                  selectedLinkId={selectedLinkId ?? undefined}
+                  onSelectLink={selectLink}
+                />
+                <label className="grid-toggle">
+                  <input
+                    type="checkbox"
+                    checked={gridVisible}
+                    onChange={(e) => setGridVisible(e.target.checked)}
+                  />
+                  Show grid
+                </label>
+              </>
             ) : (
               <div className="status">"{currentLocation.id}" has no grid/image — nothing to render.</div>
             )}

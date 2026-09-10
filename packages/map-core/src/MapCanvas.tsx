@@ -11,6 +11,8 @@ export interface MapCanvasProps {
   /** Wherever the caller has made image.file reachable — a dev server route, a blob URL, whatever. */
   imageUrl: string;
   grid: Grid | null;
+  /** Show the grid overlay at all — a view toggle, independent of whether `grid` itself is configured. */
+  gridVisible?: boolean;
   links: Link[];
   /** link.id -> the referenced Location's resolved title (a Link never carries its own title — see @hex-enductor/hexen-schema). */
   linkTitles: Record<string, string>;
@@ -26,6 +28,7 @@ export function MapCanvas({
   image,
   imageUrl,
   grid,
+  gridVisible = true,
   links,
   linkTitles,
   selectedLinkId,
@@ -58,7 +61,7 @@ export function MapCanvas({
       {/* Square grids aren't rendered yet — hexPolygons is empty for
           grid.type === "square" until that lands (see hexMath.test.ts
           for what buildHexPolygons is actually verified to do). */}
-      {hexPolygons.map((corners, i) => (
+      {gridVisible && hexPolygons.map((corners, i) => (
         <Polygon
           key={i}
           positions={polygonToLatLngs(image.height, corners)}

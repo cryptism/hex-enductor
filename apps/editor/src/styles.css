@@ -58,6 +58,28 @@ body {
   position: relative;
 }
 
+.grid-toggle {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 500; /* above Leaflet's own panes */
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(23, 25, 20, 0.82);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8em;
+  color: var(--dim);
+  cursor: pointer;
+}
+
+.grid-toggle input {
+  margin: 0;
+  cursor: pointer;
+}
+
 .mode-toggle {
   display: inline-flex;
   align-items: center;

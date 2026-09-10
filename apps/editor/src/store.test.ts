@@ -41,4 +41,13 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().selectedLinkId).toBeNull();
     expect(useAppStore.getState().editMode).toBe(true);
   });
+
+  test("grid is visible by default, and survives opening a different project", () => {
+    expect(useAppStore.getState().gridVisible).toBe(true);
+
+    useAppStore.getState().setGridVisible(false);
+    useAppStore.getState().openProject("/tmp/test.hexen.yml");
+
+    expect(useAppStore.getState().gridVisible).toBe(false);
+  });
 });
