@@ -7,7 +7,7 @@
     "apps/*"
   ],
   "scripts": {
-    "dev:server": "bun --cwd apps/server run dev",
+    "dev:hexend": "bun --cwd apps/hexend run dev",
     "dev:editor": "bun --cwd apps/editor run dev",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit",
     "test": "bun run --filter '*' test && bun test scripts",

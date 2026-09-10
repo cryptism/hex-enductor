@@ -1,6 +1,6 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpBatchLink } from "@trpc/client";
-import type { AppRouter } from "@hex-enductor/server/src/router.ts";
+import type { AppRouter } from "@hex-enductor/hexend/src/router.ts";
 
 export const trpc = createTRPCReact<AppRouter>();
 

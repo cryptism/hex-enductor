@@ -2,7 +2,7 @@ import type { Grid, HexenProject, ImageRef, Link, Location } from "@hex-enductor
 
 /**
  * Pure, transport-agnostic operations on an in-memory HexenProject —
- * no file I/O, no path, no server. Both apps/server's tRPC procedures
+ * no file I/O, no path, no server. Both apps/hexend's tRPC procedures
  * and the editor's browser-native storage back end call these, so the
  * two never drift apart on what a mutation actually means.
  */

@@ -89,4 +89,4 @@ app.post("/image", async (c) => {
   return c.json({ file: `_assets/${safeName}`, width: size.width, height: size.height });
 });
 
-app.get("/", (c) => c.text("hex-enductor server"));
+app.get("/", (c) => c.text("hexend is awake, and watching your maps."));

@@ -33,7 +33,7 @@
         "zustand": "^5.0.15",
       },
       "devDependencies": {
-        "@hex-enductor/server": "workspace:*",
+        "@hex-enductor/hexend": "workspace:*",
         "@trpc/server": "^11.18.0",
         "@types/bun": "^1.1.14",
         "@types/node": "^22.10.2",
@@ -45,8 +45,8 @@
         "vite": "^8.2.2",
       },
     },
-    "apps/server": {
-      "name": "@hex-enductor/server",
+    "apps/hexend": {
+      "name": "@hex-enductor/hexend",
       "version": "0.0.0",
       "dependencies": {
         "@hex-enductor/content-obsidian": "workspace:*",
@@ -137,11 +137,11 @@
 
     "@hex-enductor/hexen-schema": ["@hex-enductor/hexen-schema@workspace:packages/hexen-schema"],
 
+    "@hex-enductor/hexend": ["@hex-enductor/hexend@workspace:apps/hexend"],
+
     "@hex-enductor/map-core": ["@hex-enductor/map-core@workspace:packages/map-core"],
 
     "@hex-enductor/project-ops": ["@hex-enductor/project-ops@workspace:packages/project-ops"],
-
-    "@hex-enductor/server": ["@hex-enductor/server@workspace:apps/server"],
 
     "@hono/trpc-server": ["@hono/trpc-server@0.4.2", "", { "peerDependencies": { "@trpc/server": "^10.10.0 || >11.0.0-rc", "hono": ">=4.0.0" } }, "sha512-3TDrc42CZLgcTFkXQba+y7JlRWRiyw1AqhLqztWyNS2IFT+3bHld0lxKdGBttCtGKHYx0505dM67RMazjhdZqw=="],
 
