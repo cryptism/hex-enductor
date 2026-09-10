@@ -7,11 +7,11 @@
     "apps/*"
   ],
   "scripts": {
-    "dev:hexend": "bun --cwd apps/hexend run dev",
-    "dev:editor": "bun --cwd apps/editor run dev",
+    "dev:hexend": "bun run --cwd apps/hexend dev",
+    "dev:editor": "bun run --cwd apps/editor dev",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit",
     "test": "bun run --filter '*' test && bun test scripts",
-    "schema:docs": "bun --cwd packages/hexen-schema run docs",
+    "schema:docs": "bun run --cwd packages/hexen-schema docs",
     "migrate:obsidian": "bun run scripts/import-obsidian-vault.ts",
     "migrate:obsidian:strip": "bun run scripts/strip-obsidian-frontmatter.ts"
   },
