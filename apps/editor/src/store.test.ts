@@ -50,4 +50,28 @@ describe("useAppStore", () => {
 
     expect(useAppStore.getState().gridVisible).toBe(false);
   });
+
+  test("leaving edit mode exits the Add Location tool", () => {
+    useAppStore.getState().setEditMode(true);
+    useAppStore.getState().setPlacingLocation(true);
+    useAppStore.getState().setEditMode(false);
+
+    expect(useAppStore.getState().placingLocation).toBe(false);
+  });
+
+  test("switching location exits the Add Location tool", () => {
+    useAppStore.getState().setEditMode(true);
+    useAppStore.getState().setPlacingLocation(true);
+    useAppStore.getState().setCurrentLocation("inn");
+
+    expect(useAppStore.getState().placingLocation).toBe(false);
+  });
+
+  test("arming the Add Location tool clears link selection", () => {
+    useAppStore.getState().selectLink("inn");
+    useAppStore.getState().setPlacingLocation(true);
+
+    expect(useAppStore.getState().selectedLinkId).toBeNull();
+    expect(useAppStore.getState().placingLocation).toBe(true);
+  });
 });

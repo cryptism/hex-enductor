@@ -4,10 +4,11 @@ import { useAppStore } from "./store.ts";
 import { trpc, serverUrl } from "./trpc.ts";
 import { LinkForm } from "./LinkForm.tsx";
 import { LocationContentForm } from "./LocationContentForm.tsx";
+import { AddLocationForm } from "./AddLocationForm.tsx";
 import { getRecentProjects } from "./recentProjects.ts";
 import { BrandMark } from "./Logo.tsx";
 import { LoadingScreen } from "./LoadingScreen.tsx";
-import type { Link } from "@hex-enductor/hexen-schema";
+import type { Link, Point } from "@hex-enductor/hexen-schema";
 
 function dirname(path: string): string {
   const i = path.lastIndexOf("/");
@@ -118,10 +119,20 @@ function App() {
   const selectedLinkId = useAppStore((s) => s.selectedLinkId);
   const editMode = useAppStore((s) => s.editMode);
   const gridVisible = useAppStore((s) => s.gridVisible);
+  const placingLocation = useAppStore((s) => s.placingLocation);
   const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
   const selectLink = useAppStore((s) => s.selectLink);
   const setEditMode = useAppStore((s) => s.setEditMode);
   const setGridVisible = useAppStore((s) => s.setGridVisible);
+  const setPlacingLocation = useAppStore((s) => s.setPlacingLocation);
+
+  // Where the Add Location tool's pending click landed, in image pixel
+  // space — local, not store state, since it's meaningless the moment
+  // placingLocation goes false (see the effect below).
+  const [pendingPoint, setPendingPoint] = useState<Point | null>(null);
+  useEffect(() => {
+    if (!placingLocation) setPendingPoint(null);
+  }, [placingLocation]);
 
   const query = trpc.openProject.useQuery(
     { path: projectPath! },
@@ -132,6 +143,9 @@ function App() {
     onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
   });
   const saveLocationContent = trpc.saveLocationContent.useMutation({
+    onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
+  });
+  const addLocationLink = trpc.addLocationLink.useMutation({
     onSuccess: () => utils.openProject.invalidate({ path: projectPath! }),
   });
 
@@ -182,6 +196,16 @@ function App() {
               <span className="mode-toggle-track" aria-hidden="true" />
               <span className="mode-toggle-label">{editMode ? "Editing" : "Viewing"}</span>
             </label>
+
+            {editMode && (
+              <button
+                type="button"
+                className={`tool-button${placingLocation ? " active" : ""}`}
+                onClick={() => setPlacingLocation(!placingLocation)}
+              >
+                {placingLocation ? "Click the map…" : "Add Location"}
+              </button>
+            )}
 
             {editMode && isInlineContent ? (
               <LocationContentForm
@@ -256,6 +280,8 @@ function App() {
                   linkTitles={linkTitles}
                   selectedLinkId={selectedLinkId ?? undefined}
                   onSelectLink={selectLink}
+                  placing={placingLocation}
+                  onPlaceLocation={setPendingPoint}
                 />
                 <label className="grid-toggle">
                   <input
@@ -271,28 +297,51 @@ function App() {
             )}
           </main>
 
-          {editMode && selectedLink && (
+          {placingLocation && pendingPoint ? (
             <aside className="edit-panel">
-              <LinkForm
-                key={selectedLink.id}
-                link={selectedLink}
-                title={linkTitles[selectedLink.id] ?? selectedLink.id}
-                saving={saveLink.isPending}
-                onSave={(patch) =>
-                  saveLink.mutate({
-                    path: projectPath,
-                    locationId: currentLocation.id,
-                    linkId: selectedLink.id,
-                    patch: patch as Partial<Link>,
-                  })
+              <AddLocationForm
+                saving={addLocationLink.isPending}
+                onSave={(values) =>
+                  addLocationLink.mutate(
+                    {
+                      path: projectPath,
+                      parentLocationId: currentLocation.id,
+                      locationId: values.locationId,
+                      x: pendingPoint.x,
+                      y: pendingPoint.y,
+                      type: values.type,
+                    },
+                    { onSuccess: () => setPlacingLocation(false) },
+                  )
                 }
+                onCancel={() => setPendingPoint(null)}
               />
-              {selectedTargetLocation?.grid && (
-                <button className="link-button" onClick={() => setCurrentLocation(selectedTargetLocation.id)}>
-                  View map →
-                </button>
-              )}
             </aside>
+          ) : (
+            editMode &&
+            selectedLink && (
+              <aside className="edit-panel">
+                <LinkForm
+                  key={selectedLink.id}
+                  link={selectedLink}
+                  title={linkTitles[selectedLink.id] ?? selectedLink.id}
+                  saving={saveLink.isPending}
+                  onSave={(patch) =>
+                    saveLink.mutate({
+                      path: projectPath,
+                      locationId: currentLocation.id,
+                      linkId: selectedLink.id,
+                      patch: patch as Partial<Link>,
+                    })
+                  }
+                />
+                {selectedTargetLocation?.grid && (
+                  <button className="link-button" onClick={() => setCurrentLocation(selectedTargetLocation.id)}>
+                    View map →
+                  </button>
+                )}
+              </aside>
+            )
           )}
         </div>
       );

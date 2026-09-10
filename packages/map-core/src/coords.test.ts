@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { pxToLatLng, polygonToLatLngs } from "./coords.ts";
+import { pxToLatLng, polygonToLatLngs, latLngToPx } from "./coords.ts";
+import type { LatLng } from "leaflet";
 
 describe("pxToLatLng", () => {
   test("flips y against the image height (pixel (0,0) is top-left, latlng (0,0) is bottom-left)", () => {
@@ -21,5 +22,17 @@ describe("polygonToLatLngs", () => {
       [100, 0],
       [90, 10],
     ]);
+  });
+});
+
+describe("latLngToPx", () => {
+  test("is the inverse of pxToLatLng", () => {
+    expect(latLngToPx(100, { lat: 80, lng: 5 } as LatLng)).toEqual({ x: 5, y: 20 });
+  });
+
+  test("round-trips through pxToLatLng", () => {
+    const original = { x: 42, y: 17 };
+    const [lat, lng] = pxToLatLng(100, original) as [number, number];
+    expect(latLngToPx(100, { lat, lng } as LatLng)).toEqual(original);
   });
 });

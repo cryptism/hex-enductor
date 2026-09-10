@@ -74,6 +74,49 @@ export const appRouter = router({
       await saveProject(input.path, project);
       return openProject(input.path);
     }),
+
+  addLocationLink: publicProcedure
+    .input(
+      z.object({
+        path: z.string(),
+        parentLocationId: z.string(),
+        locationId: z.string().min(1),
+        x: z.number(),
+        y: z.number(),
+        type: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { project } = await openProject(input.path);
+
+      const parent = project.locations.find((l) => l.id === input.parentLocationId);
+      if (!parent) {
+        throw new Error(`No location "${input.parentLocationId}" in ${input.path}`);
+      }
+      if (parent.links.some((l) => l.id === input.locationId)) {
+        throw new Error(`"${input.parentLocationId}" already has a link to "${input.locationId}"`);
+      }
+
+      // The target might be a brand-new place, or an existing Location
+      // that just didn't have a pin on this particular map yet — both
+      // are the same operation, adding a Link, so only create the
+      // Location itself when it doesn't already exist.
+      if (!project.locations.some((l) => l.id === input.locationId)) {
+        project.locations.push({ id: input.locationId, grid: null, image: null, content: null, links: [] });
+      }
+
+      parent.links.push({
+        id: input.locationId,
+        x: input.x,
+        y: input.y,
+        type: input.type,
+        color: null,
+        hidden: false,
+      });
+
+      await saveProject(input.path, project);
+      return openProject(input.path);
+    }),
 });
 
 export type AppRouter = typeof appRouter;

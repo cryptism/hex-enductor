@@ -1,0 +1,112 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { appRouter } from "./router.ts";
+
+let projectDir: string;
+const caller = appRouter.createCaller({});
+
+async function writeProject(yamlText: string): Promise<string> {
+  const path = join(projectDir, "project.hexen.yml");
+  await writeFile(path, yamlText, "utf-8");
+  return path;
+}
+
+beforeAll(async () => {
+  projectDir = await mkdtemp(join(tmpdir(), "router-test-"));
+});
+
+afterAll(async () => {
+  await rm(projectDir, { recursive: true, force: true });
+});
+
+describe("addLocationLink", () => {
+  test("creates a new Location and links to it when the id doesn't exist yet", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+    content: { type: inline, title: The Town, body: "" }
+`);
+    const result = await caller.addLocationLink({
+      path,
+      parentLocationId: "town",
+      locationId: "old-mill",
+      x: 12,
+      y: 34,
+      type: "landmark",
+    });
+
+    const town = result.project.locations.find((l) => l.id === "town")!;
+    expect(town.links).toEqual([{ id: "old-mill", x: 12, y: 34, type: "landmark", color: null, hidden: false }]);
+
+    const mill = result.project.locations.find((l) => l.id === "old-mill");
+    expect(mill).toEqual({ id: "old-mill", grid: null, image: null, content: null, links: [] });
+  });
+
+  test("links to an existing Location instead of duplicating it", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+    content: { type: inline, title: The Town, body: "" }
+  - id: inn
+    content: { type: inline, title: The Inn, body: "" }
+`);
+    const result = await caller.addLocationLink({
+      path,
+      parentLocationId: "town",
+      locationId: "inn",
+      x: 5,
+      y: 5,
+      type: "settlement",
+    });
+
+    expect(result.project.locations.filter((l) => l.id === "inn")).toHaveLength(1);
+    const town = result.project.locations.find((l) => l.id === "town")!;
+    expect(town.links.map((l) => l.id)).toEqual(["inn"]);
+  });
+
+  test("refuses a second link to the same target from the same parent", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+    content: { type: inline, title: The Town, body: "" }
+    links:
+      - id: inn
+        x: 1
+        y: 1
+        type: settlement
+  - id: inn
+`);
+    await expect(
+      caller.addLocationLink({ path, parentLocationId: "town", locationId: "inn", x: 9, y: 9, type: "settlement" }),
+    ).rejects.toThrow(/already has a link/);
+  });
+
+  test("rejects an unknown parent location", async () => {
+    const path = await writeProject(`
+schemaVersion: 1
+title: Test Realm
+defaultLocation: town
+content: { type: inline }
+locations:
+  - id: town
+    content: { type: inline, title: The Town, body: "" }
+`);
+    await expect(
+      caller.addLocationLink({ path, parentLocationId: "nowhere", locationId: "inn", x: 0, y: 0, type: "settlement" }),
+    ).rejects.toThrow(/No location "nowhere"/);
+  });
+});

@@ -1,4 +1,4 @@
-import type { LatLngExpression } from "leaflet";
+import type { LatLng, LatLngExpression } from "leaflet";
 import type { Point } from "@hex-enductor/hexen-schema";
 
 /**
@@ -12,4 +12,9 @@ export function pxToLatLng(imageHeight: number, p: Point): LatLngExpression {
 
 export function polygonToLatLngs(imageHeight: number, points: Point[]): LatLngExpression[] {
   return points.map((p) => pxToLatLng(imageHeight, p));
+}
+
+/** The inverse of pxToLatLng — a map click's latlng back to an image pixel. */
+export function latLngToPx(imageHeight: number, latlng: LatLng): Point {
+  return { x: latlng.lng, y: imageHeight - latlng.lat };
 }

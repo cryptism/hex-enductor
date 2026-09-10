@@ -1,10 +1,20 @@
 import { useMemo } from "react";
 import { CRS, divIcon } from "leaflet";
-import { MapContainer, ImageOverlay, Polygon, Marker, Popup } from "react-leaflet";
-import type { Grid, ImageRef, Link } from "@hex-enductor/hexen-schema";
+import { MapContainer, ImageOverlay, Polygon, Marker, Popup, useMapEvents } from "react-leaflet";
+import type { Grid, ImageRef, Link, Point } from "@hex-enductor/hexen-schema";
 import { loadHexBasis, buildHexPolygons } from "./hexMath.ts";
-import { pxToLatLng, polygonToLatLngs } from "./coords.ts";
+import { pxToLatLng, polygonToLatLngs, latLngToPx } from "./coords.ts";
 import "leaflet/dist/leaflet.css";
+
+// Mounted only while the Add Location tool is active — has no
+// rendered output of its own, it just wires the map's native click
+// event to onPlace so the parent can turn it into a new pin.
+function ClickToPlace({ imageHeight, onPlace }: { imageHeight: number; onPlace: (point: Point) => void }) {
+  useMapEvents({
+    click: (e) => onPlace(latLngToPx(imageHeight, e.latlng)),
+  });
+  return null;
+}
 
 export interface MapCanvasProps {
   image: ImageRef;
@@ -18,6 +28,9 @@ export interface MapCanvasProps {
   linkTitles: Record<string, string>;
   selectedLinkId?: string;
   onSelectLink?: (linkId: string) => void;
+  /** The Add Location tool: while true, clicking the map calls onPlaceLocation instead of panning-only. */
+  placing?: boolean;
+  onPlaceLocation?: (point: Point) => void;
   /** Presentation/wiki-embed mode — no interaction, just the rendered map. Not exercised anywhere yet. */
   readOnly?: boolean;
 }
@@ -33,6 +46,8 @@ export function MapCanvas({
   linkTitles,
   selectedLinkId,
   onSelectLink,
+  placing = false,
+  onPlaceLocation,
   readOnly = false,
 }: MapCanvasProps) {
   const bounds: [[number, number], [number, number]] = [
@@ -51,11 +66,13 @@ export function MapCanvas({
     <MapContainer
       crs={CRS.Simple}
       bounds={bounds}
+      className={placing ? "placing" : undefined}
       style={{ width: "100%", height: "100%", background: "#12150f" }}
       zoomSnap={0.25}
       minZoom={-4}
       maxZoom={3}
     >
+      {placing && onPlaceLocation && <ClickToPlace imageHeight={image.height} onPlace={onPlaceLocation} />}
       <ImageOverlay url={imageUrl} bounds={bounds} />
 
       {/* Square grids aren't rendered yet — hexPolygons is empty for

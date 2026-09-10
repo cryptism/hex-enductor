@@ -80,6 +80,28 @@ body {
   cursor: pointer;
 }
 
+.leaflet-container.placing {
+  cursor: crosshair;
+}
+
+.tool-button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 1rem;
+}
+
+.tool-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .mode-toggle {
   display: inline-flex;
   align-items: center;
