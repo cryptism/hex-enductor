@@ -38,10 +38,25 @@ locations:
         icon: tavern
         color: null
         hidden: false
+      - id: notice-board
+        x: 260
+        y: 190
+        type: landmark
+        icon: notice
+        color: null
+        hidden: false
   - id: inn
     grid: null
     image: null
     content:
       type: obsidian
       ref: inn.md
+    links: []
+  - id: notice-board
+    grid: null
+    image: null
+    content:
+      type: inline
+      title: The Notice Board
+      body: A weathered board nailed up by the well, pinned with a dozen curling notices — mostly requests for a missing goat.
     links: []
