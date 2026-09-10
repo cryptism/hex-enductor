@@ -549,16 +549,6 @@ button:disabled {
   border-color: var(--accent);
 }
 
-.icon-credit {
-  margin-top: 1.5rem;
-  font-size: 0.75em;
-  color: var(--dim);
-}
-
-.icon-credit a {
-  color: var(--dim);
-}
-
 /* ---- Titles ---- */
 
 h1,
@@ -576,13 +566,21 @@ h2 {
   gap: 0.9rem;
 }
 
-.brand-mark img {
+/* Rendered as a CSS mask (see Logo.tsx) so the mark takes its color
+   from `currentColor` — var(--ink) by inheritance from body on our
+   dark editor surfaces, var(--color-ink) on the loading screen's
+   native vellum ground below — instead of baking one color into the
+   SVG and approximating the other with a filter. */
+.logo-mark {
   display: block;
   flex-shrink: 0;
-  /* The mark's ink linework (#14100e) is drawn for a light vellum
-     ground; inverted it reads as a near-white line on our dark editor
-     surfaces instead of vanishing into them. */
-  filter: invert(1);
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 
 .wordmark {
@@ -627,11 +625,6 @@ h2 {
 
 .loading-grid .brand-mark {
   color: var(--color-ink);
-}
-
-.loading-grid .brand-mark img {
-  /* On its native vellum ground the mark needs no color correction. */
-  filter: none;
 }
 
 .loading-grid .wordmark {

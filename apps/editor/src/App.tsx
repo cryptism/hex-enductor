@@ -279,22 +279,6 @@ function App() {
               })}
               {currentLocation.links.length === 0 && <li className="muted">No locations pinned here yet.</li>}
             </ul>
-
-            <p className="icon-credit">
-              Map icons by{" "}
-              <a href="https://delapouite.com" target="_blank" rel="noreferrer">
-                Delapouite
-              </a>{" "}
-              and{" "}
-              <a href="https://lorcblog.blogspot.com" target="_blank" rel="noreferrer">
-                Lorc
-              </a>{" "}
-              via{" "}
-              <a href="https://game-icons.net" target="_blank" rel="noreferrer">
-                game-icons.net
-              </a>
-              , CC BY 3.0.
-            </p>
           </aside>
 
           <main className="map-area">
