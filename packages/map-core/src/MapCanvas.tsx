@@ -99,25 +99,25 @@ export function MapCanvas({
         .map((link) => {
           const color = link.color ?? DEFAULT_MARKER_COLOR;
           const isSelected = link.id === selectedLinkId;
-          const size = isSelected ? 20 : 16;
+          const size = isSelected ? 36 : 28;
           const glyph = findLinkIcon(link.icon)?.svg ?? "";
-          const glyphSize = Math.round(size * 0.65);
+          const glyphSize = Math.round(size * 0.68);
           const icon = divIcon({
             className: "",
             html: `<div style="
               width: ${size}px;
               height: ${size}px;
               border-radius: 50%;
-              background: rgba(23,25,20,0.88);
-              border: 2px solid ${color};
-              box-shadow: 0 0 0 2px rgba(0,0,0,0.35);
+              background: rgba(23,25,20,0.95);
+              border: 3px solid ${color};
+              box-shadow: 0 0 0 2px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.6);
               display: flex;
               align-items: center;
               justify-content: center;
-              color: ${color};
+              color: #f2efe3;
             ">${glyph.replace("<svg ", `<svg width="${glyphSize}" height="${glyphSize}" `)}</div>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 10],
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
           });
 
           return (

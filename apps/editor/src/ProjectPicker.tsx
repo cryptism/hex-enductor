@@ -51,26 +51,40 @@ function DirectoryBrowser({ onOpen }: { onOpen: (path: string) => void }) {
   );
 }
 
+export interface NewProjectValues {
+  path: string;
+  title: string;
+  content: { type: "inline" } | { type: "obsidian"; vaultRoot: string };
+}
+
 function NewProjectForm({
   onCreate,
   saving,
   error,
 }: {
-  onCreate: (values: { path: string; title: string }) => void;
+  onCreate: (values: NewProjectValues) => void;
   saving: boolean;
   error?: string;
 }) {
   const [title, setTitle] = useState("");
   const [path, setPath] = useState("");
+  const [contentType, setContentType] = useState<"inline" | "obsidian">("inline");
+  const [vaultRoot, setVaultRoot] = useState(".");
 
-  const canCreate = title.trim().length > 0 && path.trim().length > 0;
+  const canCreate =
+    title.trim().length > 0 && path.trim().length > 0 && (contentType === "inline" || vaultRoot.trim().length > 0);
 
   return (
     <form
       className="link-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (canCreate) onCreate({ title: title.trim(), path: path.trim() });
+        if (!canCreate) return;
+        onCreate({
+          title: title.trim(),
+          path: path.trim(),
+          content: contentType === "obsidian" ? { type: "obsidian", vaultRoot: vaultRoot.trim() } : { type: "inline" },
+        });
       }}
     >
       <label>
@@ -86,6 +100,40 @@ function NewProjectForm({
           placeholder="/path/to/my-realm.hexen.yml"
         />
       </label>
+
+      <fieldset className="content-type-choice">
+        <legend>Content</legend>
+        <label className="radio-label">
+          <input
+            type="radio"
+            name="content-type"
+            checked={contentType === "inline"}
+            onChange={() => setContentType("inline")}
+          />
+          Inline — write title/body straight into the .hexen.yml
+        </label>
+        <label className="radio-label">
+          <input
+            type="radio"
+            name="content-type"
+            checked={contentType === "obsidian"}
+            onChange={() => setContentType("obsidian")}
+          />
+          Obsidian vault — locations resolve to markdown files
+        </label>
+        {contentType === "obsidian" && (
+          <label>
+            Vault root
+            <input
+              type="text"
+              value={vaultRoot}
+              onChange={(e) => setVaultRoot(e.target.value)}
+              placeholder=". (relative to the .hexen.yml file)"
+            />
+          </label>
+        )}
+      </fieldset>
+
       {error && <span className="field-error">{error}</span>}
       <button type="submit" disabled={!canCreate || saving}>
         {saving ? "Creating…" : "Create"}
@@ -219,7 +267,12 @@ export function ProjectPicker({ onClose }: ProjectPickerProps) {
           error={createProject.error?.message}
           onCreate={(values) =>
             createProject.mutate(
-              { path: values.path, title: values.title, defaultLocationId: slugify(values.title) },
+              {
+                path: values.path,
+                title: values.title,
+                defaultLocationId: slugify(values.title),
+                content: values.content,
+              },
               { onSuccess: () => openAndClose(values.path) },
             )
           }

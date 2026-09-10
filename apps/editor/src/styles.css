@@ -14,6 +14,8 @@
   --color-vellum: #efe9dd;
   --color-oxblood: #7d2b23;
 
+
+  --font-title: 'Cormorant Garamond', ui-serif, Garamond, serif;
   --font-display: "IM Fell English", ui-serif, Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
@@ -392,6 +394,9 @@ button:disabled {
 
 .link-list button {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   text-align: left;
   background: transparent;
   border: none;
@@ -431,6 +436,12 @@ button:disabled {
   font-size: 0.8em;
   color: var(--dim);
   margin: -0.5rem 0 0.5rem;
+}
+
+.link-form-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .link-form label {
@@ -577,7 +588,7 @@ h2 {
 .wordmark {
   display: inline-flex;
   flex-direction: column;
-  font-family: var(--font-display);
+  font-family: var(--font-title);
   font-size: 1.5rem;
   line-height: 1.02;
   text-transform: uppercase;
@@ -655,4 +666,84 @@ h2 {
   .throbber {
     animation-duration: 2.4s;
   }
+}
+
+/* ---- Sidebar header (logo + project switcher) ---- */
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.sidebar-header .project-switcher {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.logo-button {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  line-height: 0;
+}
+
+.logo-button:hover {
+  opacity: 0.8;
+}
+
+/* ---- About modal ---- */
+
+.about-modal {
+  max-width: 28rem;
+}
+
+.about-banner {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  background: var(--color-vellum);
+}
+
+.about-modal h4 {
+  margin: 1rem 0 0.3rem;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+
+.about-modal p {
+  margin: 0;
+  font-size: 0.9em;
+}
+
+/* ---- New project content-type choice ---- */
+
+.content-type-choice {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem 0.6rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.content-type-choice legend {
+  font-size: 0.75em;
+  color: var(--dim);
+  padding: 0 0.3rem;
+}
+
+.content-type-choice .radio-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9em;
 }

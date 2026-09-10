@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { MapCanvas } from "@hex-enductor/map-core";
+import { MapCanvas, findLinkIcon } from "@hex-enductor/map-core";
 import { useAppStore } from "./store.ts";
 import { LinkForm } from "./LinkForm.tsx";
 import { LocationContentForm } from "./LocationContentForm.tsx";
@@ -8,7 +8,8 @@ import { ConfigureGridForm } from "./ConfigureGridForm.tsx";
 import { ImageUpload } from "./ImageUpload.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { LocationBrowser } from "./LocationBrowser.tsx";
-import { BrandMark } from "./Logo.tsx";
+import { AboutModal } from "./AboutModal.tsx";
+import { BrandMark, Logo } from "./Logo.tsx";
 import { LoadingScreen } from "./LoadingScreen.tsx";
 import type { OpenedProjectData } from "./storage/index.ts";
 import type { Grid, Link, Point } from "@hex-enductor/hexen-schema";
@@ -84,6 +85,7 @@ function App() {
   // switching projects, not editing this one, so it's available
   // regardless of editMode and isn't reset by any of the effects above.
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   // Every Location in the project, filterable, independent of which
   // map you're on — navigation, not a mutation, so no editMode gate.
@@ -160,9 +162,14 @@ function App() {
       mainContent = (
         <div className="app">
           <aside className="sidebar">
-            <button type="button" className="project-switcher" onClick={() => setPickerOpen(true)}>
-              {project.title}
-            </button>
+            <div className="sidebar-header">
+              <button type="button" className="logo-button" onClick={() => setAboutOpen(true)} aria-label="About Hex Enductor">
+                <Logo size={28} />
+              </button>
+              <button type="button" className="project-switcher" onClick={() => setPickerOpen(true)}>
+                {project.title}
+              </button>
+            </div>
             <button type="button" className="link-button sidebar-spaced" onClick={() => setBrowserOpen(true)}>
               Browse all locations…
             </button>
@@ -255,17 +262,21 @@ function App() {
             )}
 
             <ul className="link-list">
-              {currentLocation.links.map((link) => (
-                <li key={link.id}>
-                  <button
-                    className={link.id === selectedLinkId ? "selected" : ""}
-                    onClick={() => selectLink(link.id)}
-                  >
-                    {linkTitles[link.target]}
-                    {link.hidden ? " (hidden)" : ""}
-                  </button>
-                </li>
-              ))}
+              {currentLocation.links.map((link) => {
+                const icon = findLinkIcon(link.icon);
+                return (
+                  <li key={link.id}>
+                    <button
+                      className={link.id === selectedLinkId ? "selected" : ""}
+                      onClick={() => selectLink(link.id)}
+                    >
+                      {icon && <span className="icon-swatch" dangerouslySetInnerHTML={{ __html: icon.svg }} />}
+                      {linkTitles[link.target]}
+                      {link.hidden ? " (hidden)" : ""}
+                    </button>
+                  </li>
+                );
+              })}
               {currentLocation.links.length === 0 && <li className="muted">No locations pinned here yet.</li>}
             </ul>
 
@@ -396,6 +407,7 @@ function App() {
     <>
       <LoadingScreen active={!project} />
       {mainContent}
+      {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {pickerOpen && (
         <div className="modal-backdrop">
           <div className="modal-panel">

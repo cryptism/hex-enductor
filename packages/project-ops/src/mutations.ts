@@ -1,4 +1,4 @@
-import type { Grid, HexenProject, ImageRef, Link, Location } from "@hex-enductor/hexen-schema";
+import type { Grid, HexenProject, ImageRef, Link, Location, ProjectContent } from "@hex-enductor/hexen-schema";
 
 /**
  * Pure, transport-agnostic operations on an in-memory HexenProject —
@@ -7,12 +7,16 @@ import type { Grid, HexenProject, ImageRef, Link, Location } from "@hex-enductor
  * two never drift apart on what a mutation actually means.
  */
 
-export function createMinimalProject(title: string, defaultLocationId: string): HexenProject {
+export function createMinimalProject(
+  title: string,
+  defaultLocationId: string,
+  content: ProjectContent = { type: "inline" },
+): HexenProject {
   return {
     schemaVersion: 1,
     title,
     defaultLocation: defaultLocationId,
-    content: { type: "inline" },
+    content,
     locations: [{ id: defaultLocationId, grid: null, image: null, content: null, links: [] }],
   };
 }

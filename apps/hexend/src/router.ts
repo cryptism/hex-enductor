@@ -1,7 +1,13 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { LinkSchema, InlineLocationContentSchema, GridSchema, ImageRefSchema } from "@hex-enductor/hexen-schema";
+import {
+  LinkSchema,
+  InlineLocationContentSchema,
+  GridSchema,
+  ImageRefSchema,
+  ProjectContentSchema,
+} from "@hex-enductor/hexen-schema";
 import {
   createMinimalProject,
   saveLink as applySaveLink,
@@ -28,6 +34,7 @@ export const appRouter = router({
         path: z.string(),
         title: z.string().min(1),
         defaultLocationId: z.string().min(1),
+        content: ProjectContentSchema.default({ type: "inline" }),
       }),
     )
     .mutation(async ({ input }) => {
@@ -39,9 +46,7 @@ export const appRouter = router({
         throw new Error(`Directory "${dir}" doesn't exist`);
       }
 
-      // No vault to choose or scaffold — inline content means a new
-      // project is immediately valid with nothing but a name.
-      const project = createMinimalProject(input.title, input.defaultLocationId);
+      const project = createMinimalProject(input.title, input.defaultLocationId, input.content);
 
       await saveProject(input.path, project);
       return openProject(input.path);

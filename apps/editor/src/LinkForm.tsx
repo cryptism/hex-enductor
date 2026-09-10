@@ -3,6 +3,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { Link } from "@hex-enductor/hexen-schema";
+import { findLinkIcon } from "@hex-enductor/map-core";
 import { IconPicker } from "./IconPicker.tsx";
 
 const LinkFormSchema = z.object({
@@ -42,6 +43,7 @@ export function LinkForm({ link, title, onSave, saving }: LinkFormProps) {
   const {
     register,
     control,
+    watch,
     handleSubmit,
     reset,
     formState: { isDirty, errors },
@@ -49,6 +51,8 @@ export function LinkForm({ link, title, onSave, saving }: LinkFormProps) {
     resolver: zodResolver(LinkFormSchema),
     values: linkToFormValues(link),
   });
+
+  const selectedIcon = findLinkIcon(watch("icon"));
 
   // react-hook-form's `values` option keeps the form in sync when a
   // different link is selected, but doesn't reset the dirty flag on
@@ -72,7 +76,10 @@ export function LinkForm({ link, title, onSave, saving }: LinkFormProps) {
 
   return (
     <form onSubmit={submit} className="link-form">
-      <h3>{title}</h3>
+      <h3 className="link-form-title">
+        {selectedIcon && <span className="icon-swatch" dangerouslySetInnerHTML={{ __html: selectedIcon.svg }} />}
+        {title}
+      </h3>
       <p className="link-form-id">→ {link.target}</p>
 
       <label>
