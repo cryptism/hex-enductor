@@ -705,6 +705,22 @@ h2 {
   background: var(--color-vellum);
 }
 
+.about-easter-egg {
+  display: block;
+  margin: -0.5rem 0 1rem;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 0.9em;
+  color: var(--dim);
+  text-align: center;
+  text-decoration: none;
+}
+
+.about-easter-egg:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .about-modal h4 {
   margin: 1rem 0 0.3rem;
   font-size: 0.85em;
