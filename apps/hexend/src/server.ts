@@ -3,8 +3,12 @@ import { extname, resolve, sep } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { trpcServer } from "@hono/trpc-server";
+import { upgradeWebSocket, websocket } from "hono/bun";
 import { appRouter } from "./router.ts";
 import { readImageSize } from "@hex-enductor/project-ops";
+import { getOrCreateSession, applyAndBroadcast, undo, redo, sessionState, ClientMessageSchema, type SessionSocket } from "./session.ts";
+
+export { websocket };
 
 const UPLOAD_EXTENSIONS: Record<string, string> = { png: "png", jpg: "jpg", jpeg: "jpg" };
 
@@ -88,5 +92,52 @@ app.post("/image", async (c) => {
 
   return c.json({ file: `_assets/${safeName}`, width: size.width, height: size.height });
 });
+
+// The one way a client learns or changes a project's live state: connect,
+// get the current state immediately, then send commands and receive a
+// fresh "state" broadcast — including every other client watching the
+// same path — after each one lands. hexend is authoritative: it applies
+// and persists a command before anyone (including the sender) sees its
+// effect.
+app.get(
+  "/ws",
+  upgradeWebSocket((c) => {
+    const path = c.req.query("path");
+    if (!path) {
+      return { onOpen: (_evt, ws) => ws.close(1008, "Missing path query param") };
+    }
+
+    let sessionPromise: ReturnType<typeof getOrCreateSession> | null = null;
+
+    return {
+      async onOpen(_evt, ws) {
+        sessionPromise = getOrCreateSession(path);
+        const session = await sessionPromise;
+        session.sockets.add(ws as SessionSocket);
+        ws.send(JSON.stringify({ type: "state", data: sessionState(session) }));
+      },
+      async onMessage(evt, ws) {
+        if (!sessionPromise || typeof evt.data !== "string") return;
+        const session = await sessionPromise;
+        let raw: unknown;
+        try {
+          raw = JSON.parse(evt.data);
+        } catch {
+          return;
+        }
+        const parsed = ClientMessageSchema.safeParse(raw);
+        if (!parsed.success) return;
+
+        if (parsed.data.type === "command") applyAndBroadcast(session, parsed.data.command);
+        else if (parsed.data.type === "undo") undo(session);
+        else redo(session);
+      },
+      async onClose(_evt, ws) {
+        if (!sessionPromise) return;
+        (await sessionPromise).sockets.delete(ws as SessionSocket);
+      },
+    };
+  }),
+);
 
 app.get("/", (c) => c.text("hexend is awake, and watching your maps."));

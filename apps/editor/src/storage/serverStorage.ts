@@ -1,4 +1,5 @@
-import { trpcClient, serverUrl } from "../trpc.ts";
+import { connectLiveSession, type LiveSession } from "@hex-enductor/live-session";
+import { serverUrl } from "../trpc.ts";
 import type { ProjectStorage } from "./types.ts";
 
 function dirname(path: string): string {
@@ -13,38 +14,38 @@ function extensionFor(file: File): string | null {
   return m ? m[1]!.toLowerCase() : null;
 }
 
-/** Wraps the existing tRPC calls — the storage backend the app has had all along, just behind the ProjectStorage interface now. */
+/** Wraps hexend's live /ws session — the storage backend the app has had all along, just server-authoritative now. */
 export function createServerStorage(path: string): ProjectStorage {
+  let session: LiveSession | null = null;
+
   return {
     label: path,
 
-    open() {
-      return trpcClient.openProject.query({ path });
+    async open() {
+      session = await connectLiveSession(serverUrl(), path);
+      return session.initial;
     },
 
-    refresh() {
-      return trpcClient.openProject.query({ path });
+    subscribe(onUpdate) {
+      if (!session) throw new Error("open() hasn't resolved yet");
+      return session.subscribe(onUpdate);
+    },
+
+    execute(command) {
+      session?.execute(command);
+    },
+
+    undo() {
+      session?.undo();
+    },
+
+    redo() {
+      session?.redo();
     },
 
     async getImageUrl(file) {
       const dir = dirname(path);
       return `${serverUrl()}/image?dir=${encodeURIComponent(dir)}&file=${encodeURIComponent(file)}`;
-    },
-
-    saveLink(locationId, linkId, patch) {
-      return trpcClient.saveLink.mutate({ path, locationId, linkId, patch });
-    },
-
-    saveLocationContent(locationId, patch) {
-      return trpcClient.saveLocationContent.mutate({ path, locationId, patch });
-    },
-
-    addLocationLink(parentLocationId, targetLocationId, x, y, type) {
-      return trpcClient.addLocationLink.mutate({ path, parentLocationId, targetLocationId, x, y, type });
-    },
-
-    saveGrid(locationId, grid) {
-      return trpcClient.saveGrid.mutate({ path, locationId, grid });
     },
 
     async uploadImage(locationId, file) {
@@ -57,13 +58,13 @@ export function createServerStorage(path: string): ProjectStorage {
         { method: "POST", body: file },
       );
       if (!res.ok) throw new Error(await res.text());
-      const image = await res.json();
+      const image = (await res.json()) as { file: string; width: number; height: number };
 
-      return trpcClient.saveImage.mutate({ path, locationId, image });
+      session?.execute({ type: "saveImage", locationId, image });
     },
 
     removeImage(locationId) {
-      return trpcClient.saveImage.mutate({ path, locationId, image: null });
+      session?.execute({ type: "saveImage", locationId, image: null });
     },
   };
 }

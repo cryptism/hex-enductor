@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { OpenedProjectData, ProjectStorage } from "./storage/index.ts";
+import type { ProjectStorage } from "./storage/index.ts";
 
 const ACCEPT = "image/png,image/jpeg";
 
@@ -7,17 +7,17 @@ export interface ImageUploadProps {
   storage: ProjectStorage;
   locationId: string;
   hasImage: boolean;
-  /** Called after either a successful upload or a successful remove — the fresh project data. */
-  onDone: (data: OpenedProjectData) => void;
 }
 
 // A command, not a tool: one file dialog, one call to the active
 // storage backend. Which backend that is (server or local folder)
-// doesn't matter here — that's exactly what ProjectStorage is for.
-// Re-uploading for the same location always overwrites the same
+// doesn't matter here — that's exactly what ProjectStorage is for. The
+// resulting project data isn't returned from here — it arrives through
+// the storage's own subscribe(), same as every other mutation. Re-
+// uploading for the same location always overwrites the same
 // underlying file, so "replace" needs nothing extra beyond calling
 // this again.
-export function ImageUpload({ storage, locationId, hasImage, onDone }: ImageUploadProps) {
+export function ImageUpload({ storage, locationId, hasImage }: ImageUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -26,7 +26,7 @@ export function ImageUpload({ storage, locationId, hasImage, onDone }: ImageUplo
     setUploading(true);
     setError(undefined);
     try {
-      onDone(await storage.uploadImage(locationId, file));
+      await storage.uploadImage(locationId, file);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -34,16 +34,9 @@ export function ImageUpload({ storage, locationId, hasImage, onDone }: ImageUplo
     }
   }
 
-  async function handleRemove() {
-    setUploading(true);
+  function handleRemove() {
     setError(undefined);
-    try {
-      onDone(await storage.removeImage(locationId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setUploading(false);
-    }
+    storage.removeImage(locationId);
   }
 
   return (
@@ -63,7 +56,7 @@ export function ImageUpload({ storage, locationId, hasImage, onDone }: ImageUplo
         {uploading ? "Uploading…" : hasImage ? "Replace image…" : "Upload image…"}
       </button>
       {hasImage && (
-        <button type="button" className="link-button" disabled={uploading} onClick={() => void handleRemove()}>
+        <button type="button" className="link-button" disabled={uploading} onClick={handleRemove}>
           Remove image
         </button>
       )}

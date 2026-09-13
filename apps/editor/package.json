@@ -14,6 +14,7 @@
     "@hex-enductor/content-obsidian": "workspace:*",
     "@hex-enductor/content-resolver": "workspace:*",
     "@hex-enductor/hexen-schema": "workspace:*",
+    "@hex-enductor/live-session": "workspace:*",
     "@hex-enductor/map-core": "workspace:*",
     "@hex-enductor/project-ops": "workspace:*",
     "@hookform/resolvers": "^5.9.1",

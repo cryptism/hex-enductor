@@ -11,7 +11,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@hex-enductor/hexen-schema": "workspace:*"
+    "@hex-enductor/hexen-schema": "workspace:*",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",

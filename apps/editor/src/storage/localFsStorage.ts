@@ -1,12 +1,5 @@
 import { parseHexenProject, serializeHexenProject, type HexenProject } from "@hex-enductor/hexen-schema";
-import {
-  saveLink as applySaveLink,
-  saveLocationContent as applySaveLocationContent,
-  addLocationLink as applyAddLocationLink,
-  saveGrid as applySaveGrid,
-  saveImage as applySaveImage,
-  readImageSize,
-} from "@hex-enductor/project-ops";
+import { applyCommand, readImageSize, type Command } from "@hex-enductor/project-ops";
 // Deep import, not the package's index.ts barrel — that one also pulls
 // in node:fs/node:path for the server-side resolver, which Vite can't
 // bundle for the browser. This file is pure (gray-matter only).
@@ -88,6 +81,14 @@ async function resolveContent(
 /** The File System Access API back end — a project opened as a folder in the browser, no server involved at all. */
 export function createLocalFsStorage(dirHandle: FileSystemDirectoryHandle): ProjectStorage {
   let fileHandle: FileSystemFileHandle | null = null;
+  const listeners = new Set<(data: OpenedProjectData) => void>();
+
+  // There's no server here to be authoritative over, so undo/redo is
+  // just a local command log + cursor, same shape as hexend's session
+  // but scoped to this one tab.
+  let log: { command: Command; snapshot: HexenProject }[] = [];
+  let cursor = -1;
+  let baseSnapshot: HexenProject | null = null;
 
   async function getFileHandle(): Promise<FileSystemFileHandle> {
     fileHandle ??= await findHexenFileHandle(dirHandle);
@@ -113,36 +114,53 @@ export function createLocalFsStorage(dirHandle: FileSystemDirectoryHandle): Proj
     return { project, warnings, ...(await resolveContent(dirHandle, project)) };
   }
 
-  async function commit(mutate: (project: HexenProject) => HexenProject): Promise<OpenedProjectData> {
-    const project = mutate(await readProject());
+  async function notify(): Promise<void> {
+    const data = await open();
+    for (const listener of listeners) listener(data);
+  }
+
+  async function settle(project: HexenProject): Promise<void> {
     await writeProject(project);
-    return open();
+    await notify();
+  }
+
+  async function execute(command: Command): Promise<void> {
+    baseSnapshot ??= structuredClone(await readProject());
+    if (cursor < log.length - 1) log = log.slice(0, cursor + 1);
+    const current = cursor === -1 ? baseSnapshot : log[cursor]!.snapshot;
+    const next = applyCommand(structuredClone(current), command);
+    log.push({ command, snapshot: structuredClone(next) });
+    cursor++;
+    await settle(next);
   }
 
   return {
     label: dirHandle.name,
     open,
-    refresh: open,
+
+    subscribe(onUpdate) {
+      listeners.add(onUpdate);
+      return () => listeners.delete(onUpdate);
+    },
+
+    execute,
+
+    async undo() {
+      if (cursor < 0 || !baseSnapshot) return;
+      cursor--;
+      const snapshot = cursor === -1 ? baseSnapshot : log[cursor]!.snapshot;
+      await settle(structuredClone(snapshot));
+    },
+
+    async redo() {
+      if (cursor >= log.length - 1) return;
+      cursor++;
+      await settle(structuredClone(log[cursor]!.snapshot));
+    },
 
     async getImageUrl(file) {
       const handle = await traverseToFile(dirHandle, file, false);
       return URL.createObjectURL(await handle.getFile());
-    },
-
-    saveLink(locationId, linkId, patch) {
-      return commit((project) => applySaveLink(project, locationId, linkId, patch));
-    },
-
-    saveLocationContent(locationId, patch) {
-      return commit((project) => applySaveLocationContent(project, locationId, patch));
-    },
-
-    addLocationLink(parentLocationId, targetLocationId, x, y, type) {
-      return commit((project) => applyAddLocationLink(project, parentLocationId, targetLocationId, x, y, type));
-    },
-
-    saveGrid(locationId, grid) {
-      return commit((project) => applySaveGrid(project, locationId, grid));
     },
 
     async uploadImage(locationId, file) {
@@ -160,13 +178,15 @@ export function createLocalFsStorage(dirHandle: FileSystemDirectoryHandle): Proj
       await writable.write(bytes);
       await writable.close();
 
-      return commit((project) =>
-        applySaveImage(project, locationId, { file: `_assets/${safeName}`, width: size.width, height: size.height }),
-      );
+      await execute({
+        type: "saveImage",
+        locationId,
+        image: { file: `_assets/${safeName}`, width: size.width, height: size.height },
+      });
     },
 
     removeImage(locationId) {
-      return commit((project) => applySaveImage(project, locationId, null));
+      void execute({ type: "saveImage", locationId, image: null });
     },
   };
 }

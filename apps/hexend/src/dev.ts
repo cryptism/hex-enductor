@@ -1,7 +1,7 @@
 // Bun dev entrypoint. A Node production entrypoint is just
 // `serve(app)` from `@hono/node-server` wrapping the same `app` export
 // — not written yet, not needed to prove this out.
-import { app } from "./server.ts";
+import { app, websocket } from "./server.ts";
 
 const port = Number(process.env.PORT ?? 4000);
 
@@ -21,4 +21,5 @@ console.log(`  feed it a .hexen.yml, or feed it nothing — it will wait either 
 export default {
   port,
   fetch: app.fetch,
+  websocket,
 };

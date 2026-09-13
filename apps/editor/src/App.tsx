@@ -62,6 +62,32 @@ function App() {
     };
   }, [storage]);
 
+  // Every state change after the initial load — this storage's own
+  // commands settling, or (server-backed projects) another connected
+  // client's — arrives here instead of from a mutation's return value.
+  useEffect(() => {
+    if (!storage) return;
+    return storage.subscribe((d) => {
+      setData(d);
+      setSavingLink(false);
+      setSavingContent(false);
+      setAddingLocation(false);
+      setSavingGrid(false);
+    });
+  }, [storage]);
+
+  useEffect(() => {
+    if (!storage || !editMode) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      e.preventDefault();
+      if (e.shiftKey) storage!.redo();
+      else storage!.undo();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [storage, editMode]);
+
   // Where the Add Location tool's pending click landed, in image pixel
   // space — local, not store state, since it's meaningless the moment
   // placingLocation goes false (see the effect below).
@@ -181,6 +207,17 @@ function App() {
             </label>
 
             {editMode && (
+              <div className="tool-row">
+                <button type="button" className="tool-button" onClick={() => storage.undo()}>
+                  Undo
+                </button>
+                <button type="button" className="tool-button" onClick={() => storage.redo()}>
+                  Redo
+                </button>
+              </div>
+            )}
+
+            {editMode && (
               <button
                 type="button"
                 className={`tool-button${placingLocation ? " active" : ""}`}
@@ -200,7 +237,6 @@ function App() {
                 storage={storage}
                 locationId={currentLocation.id}
                 hasImage={currentLocation.image !== null}
-                onDone={setData}
               />
             )}
 
@@ -227,10 +263,7 @@ function App() {
                 saving={savingContent}
                 onSave={(patch) => {
                   setSavingContent(true);
-                  storage
-                    .saveLocationContent(currentLocation.id, patch)
-                    .then(setData)
-                    .finally(() => setSavingContent(false));
+                  storage.execute({ type: "saveLocationContent", locationId: currentLocation.id, patch });
                 }}
               />
             ) : (
@@ -318,14 +351,9 @@ function App() {
                 saving={savingGrid}
                 onApply={(grid) => {
                   setSavingGrid(true);
-                  storage
-                    .saveGrid(currentLocation.id, grid)
-                    .then((d) => {
-                      setData(d);
-                      setConfiguringGrid(false);
-                      setDraftGrid(null);
-                    })
-                    .finally(() => setSavingGrid(false));
+                  storage.execute({ type: "saveGrid", locationId: currentLocation.id, grid });
+                  setConfiguringGrid(false);
+                  setDraftGrid(null);
                 }}
                 onCancel={() => {
                   setConfiguringGrid(false);
@@ -339,13 +367,15 @@ function App() {
                 saving={addingLocation}
                 onSave={(values) => {
                   setAddingLocation(true);
-                  storage
-                    .addLocationLink(currentLocation.id, values.locationId, pendingPoint.x, pendingPoint.y, values.type)
-                    .then((d) => {
-                      setData(d);
-                      setPlacingLocation(false);
-                    })
-                    .finally(() => setAddingLocation(false));
+                  storage.execute({
+                    type: "addLocationLink",
+                    parentLocationId: currentLocation.id,
+                    targetLocationId: values.locationId,
+                    x: pendingPoint.x,
+                    y: pendingPoint.y,
+                    linkType: values.type,
+                  });
+                  setPlacingLocation(false);
                 }}
                 onCancel={() => setPendingPoint(null)}
               />
@@ -361,10 +391,12 @@ function App() {
                     saving={savingLink}
                     onSave={(patch) => {
                       setSavingLink(true);
-                      storage
-                        .saveLink(currentLocation.id, selectedLink.id, patch as Partial<Link>)
-                        .then(setData)
-                        .finally(() => setSavingLink(false));
+                      storage.execute({
+                        type: "saveLink",
+                        locationId: currentLocation.id,
+                        linkId: selectedLink.id,
+                        patch: patch as Partial<Link>,
+                      });
                     }}
                   />
                 ) : (

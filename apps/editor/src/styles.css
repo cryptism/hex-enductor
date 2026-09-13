@@ -99,6 +99,16 @@ body {
   color: var(--accent);
 }
 
+.tool-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tool-row .tool-button {
+  margin-bottom: 0;
+}
+
 .image-upload {
   margin-bottom: 1rem;
 }

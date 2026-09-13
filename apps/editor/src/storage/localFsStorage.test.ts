@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { OpenedProjectData } from "@hex-enductor/live-session";
 import { createLocalFsStorage } from "./localFsStorage.ts";
 
 // A minimal in-memory stand-in for the File System Access API — just
@@ -113,6 +114,19 @@ locations:
     content: { type: obsidian, ref: town.md }
 `;
 
+// execute()/undo()/redo() are fire-and-forget from the ProjectStorage
+// interface's point of view — this suite observes their effect through
+// subscribe(), the same way App.tsx does, instead of awaiting a return
+// value that no longer exists.
+function nextUpdate(storage: ReturnType<typeof createLocalFsStorage>): Promise<OpenedProjectData> {
+  return new Promise((resolve) => {
+    const unsubscribe = storage.subscribe((data) => {
+      unsubscribe();
+      resolve(data);
+    });
+  });
+}
+
 describe("createLocalFsStorage", () => {
   test("open() parses the .hexen.yml found in the folder", async () => {
     const storage = createLocalFsStorage(fakeRoot(YAML) as unknown as FileSystemDirectoryHandle);
@@ -154,10 +168,12 @@ describe("createLocalFsStorage", () => {
     expect(data.resolveErrors.town).toMatch(/no vault configured/);
   });
 
-  test("saveLink writes the patch back to the file", async () => {
+  test("execute(saveLink) writes the patch back to the file and notifies subscribers", async () => {
     const root = fakeRoot(YAML);
     const storage = createLocalFsStorage(root as unknown as FileSystemDirectoryHandle);
-    const data = await storage.saveLink("town", "front-door", { hidden: true });
+    const updated = nextUpdate(storage);
+    storage.execute({ type: "saveLink", locationId: "town", linkId: "front-door", patch: { hidden: true } });
+    const data = await updated;
     expect(data.project.locations[0]!.links[0]!.hidden).toBe(true);
 
     // and it's really on disk (the fake's disk), not just in memory
@@ -165,20 +181,31 @@ describe("createLocalFsStorage", () => {
     expect(reopened.project.locations[0]!.links[0]!.hidden).toBe(true);
   });
 
-  test("saveLocationContent updates the inline content", async () => {
+  test("execute(saveLocationContent) updates the inline content", async () => {
     const storage = createLocalFsStorage(fakeRoot(YAML) as unknown as FileSystemDirectoryHandle);
-    const data = await storage.saveLocationContent("inn", { body: "Warm and loud." });
+    const updated = nextUpdate(storage);
+    storage.execute({ type: "saveLocationContent", locationId: "inn", patch: { body: "Warm and loud." } });
+    const data = await updated;
     expect(data.resolvedContent.inn).toEqual({ title: "The Inn", body: "Warm and loud." });
   });
 
-  test("addLocationLink creates a new Location and links to it", async () => {
+  test("execute(addLocationLink) creates a new Location and links to it", async () => {
     const storage = createLocalFsStorage(fakeRoot(YAML) as unknown as FileSystemDirectoryHandle);
-    const data = await storage.addLocationLink("town", "old-mill", 5, 6, "landmark");
+    const updated = nextUpdate(storage);
+    storage.execute({
+      type: "addLocationLink",
+      parentLocationId: "town",
+      targetLocationId: "old-mill",
+      x: 5,
+      y: 6,
+      linkType: "landmark",
+    });
+    const data = await updated;
     expect(data.project.locations.find((l) => l.id === "old-mill")).toBeTruthy();
     expect(data.project.locations[0]!.links.map((l) => l.target)).toContain("old-mill");
   });
 
-  test("saveGrid sets and clears the grid", async () => {
+  test("execute(saveGrid) sets and clears the grid", async () => {
     const storage = createLocalFsStorage(fakeRoot(YAML) as unknown as FileSystemDirectoryHandle);
     const grid = {
       type: "hex" as const,
@@ -187,11 +214,34 @@ describe("createLocalFsStorage", () => {
       b2: { x: 5, y: 8 },
       style: { color: "#fff", weight: 1, opacity: 0.5 },
     };
-    const withGrid = await storage.saveGrid("town", grid);
-    expect(withGrid.project.locations[0]!.grid).toEqual(grid);
 
-    const cleared = await storage.saveGrid("town", null);
-    expect(cleared.project.locations[0]!.grid).toBeNull();
+    const first = nextUpdate(storage);
+    storage.execute({ type: "saveGrid", locationId: "town", grid });
+    expect((await first).project.locations[0]!.grid).toEqual(grid);
+
+    const second = nextUpdate(storage);
+    storage.execute({ type: "saveGrid", locationId: "town", grid: null });
+    expect((await second).project.locations[0]!.grid).toBeNull();
+  });
+
+  test("undo/redo step back and forward through this tab's own command history", async () => {
+    const storage = createLocalFsStorage(fakeRoot(YAML) as unknown as FileSystemDirectoryHandle);
+
+    let update = nextUpdate(storage);
+    storage.execute({ type: "saveLink", locationId: "town", linkId: "front-door", patch: { x: 2 } });
+    await update;
+
+    update = nextUpdate(storage);
+    storage.execute({ type: "saveLink", locationId: "town", linkId: "front-door", patch: { x: 3 } });
+    await update;
+
+    update = nextUpdate(storage);
+    storage.undo();
+    expect((await update).project.locations[0]!.links[0]!.x).toBe(2);
+
+    update = nextUpdate(storage);
+    storage.redo();
+    expect((await update).project.locations[0]!.links[0]!.x).toBe(3);
   });
 
   test("uploadImage writes into _assets and sets location.image", async () => {
@@ -206,7 +256,9 @@ describe("createLocalFsStorage", () => {
     view.setUint32(20, 300, false);
     const file = new File([bytes], "map.png", { type: "image/png" });
 
-    const data = await storage.uploadImage("town", file);
+    const updated = nextUpdate(storage);
+    await storage.uploadImage("town", file);
+    const data = await updated;
     expect(data.project.locations[0]!.image).toEqual({ file: "_assets/town.png", width: 400, height: 300 });
     expect(root.dirs.get("_assets")?.files.has("town.png")).toBe(true);
   });
@@ -219,7 +271,9 @@ describe("createLocalFsStorage", () => {
 
   test("removeImage clears location.image", async () => {
     const storage = createLocalFsStorage(fakeRoot(YAML) as unknown as FileSystemDirectoryHandle);
-    const data = await storage.removeImage("town");
+    const updated = nextUpdate(storage);
+    storage.removeImage("town");
+    const data = await updated;
     expect(data.project.locations[0]!.image).toBeNull();
   });
 
