@@ -18,7 +18,9 @@
   },
   "dependencies": {
     "@hex-enductor/hexen-schema": "workspace:*",
-    "gray-matter": "^4.0.3"
+    "@hex-enductor/live-session": "workspace:*",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.6.1"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",
