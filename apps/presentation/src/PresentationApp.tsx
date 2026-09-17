@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapCanvas, findLinkIcon } from "@hex-enductor/map-core";
-import { connectLiveSession, type LiveSession, type OpenedProjectData } from "@hex-enductor/live-session";
+import { connectLiveSession, type OpenedProjectData } from "@hex-enductor/live-session";
 
 function dirname(path: string): string {
   const i = path.lastIndexOf("/");
@@ -10,8 +10,6 @@ function dirname(path: string): string {
 interface Target {
   server: string;
   path: string;
-  /** &gm=1 turns on fog-of-war controls — meant for the GM's own window, never the projected/player one. */
-  gm: boolean;
 }
 
 // This app never edits and never browses the filesystem — it's handed
@@ -22,22 +20,22 @@ function targetFromUrl(): Target | null {
   const params = new URLSearchParams(window.location.search);
   const server = params.get("server");
   const path = params.get("path");
-  return server && path ? { server, path, gm: params.get("gm") === "1" } : null;
+  return server && path ? { server, path } : null;
 }
 
-// A rider on hexend's live session: it renders whatever the editor
-// (or anyone else connected to the same project) does, live, the same
-// way for every viewer. The one exception is fog of war — with
-// ?gm=1, this window also calls execute() to start/clear fog and
-// toggle cells, since that control is meant to live right where the
-// GM is already looking at the table, not in a separate editor UI.
+// A read-only rider on hexend's live session: it never calls
+// execute/undo/redo, only subscribe — so it renders whatever the
+// editor (or anyone else connected to the same project) does, live,
+// fog of war included, with no separate "read-only mode" to keep in
+// sync elsewhere. Fog is applied/removed from the editor's own GM
+// mode (see apps/editor), not here — this window just shows the
+// result, same as it would any other command.
 export function PresentationApp() {
   const target = useMemo(targetFromUrl, []);
   const [data, setData] = useState<OpenedProjectData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentLocationId, setCurrentLocationId] = useState<string | null>(null);
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
-  const sessionRef = useRef<LiveSession | null>(null);
 
   useEffect(() => {
     if (!target) return;
@@ -50,7 +48,6 @@ export function PresentationApp() {
           session.close();
           return;
         }
-        sessionRef.current = session;
         setData(session.initial);
         unsubscribe = session.subscribe(setData);
       })
@@ -59,7 +56,6 @@ export function PresentationApp() {
     return () => {
       cancelled = true;
       unsubscribe?.();
-      sessionRef.current = null;
     };
   }, [target]);
 
@@ -97,18 +93,6 @@ export function PresentationApp() {
     if (targetLocation?.image) setCurrentLocationId(targetLocation.id);
   }
 
-  function startFog() {
-    sessionRef.current?.execute({ type: "setFog", locationId: currentLocation!.id, fog: { revealedCells: [] } });
-  }
-
-  function clearFog() {
-    sessionRef.current?.execute({ type: "setFog", locationId: currentLocation!.id, fog: null });
-  }
-
-  function toggleFogCell(cell: string) {
-    sessionRef.current?.execute({ type: "toggleFogCell", locationId: currentLocation!.id, cell });
-  }
-
   return (
     <div className="presentation">
       <header className="presentation-header">
@@ -116,11 +100,6 @@ export function PresentationApp() {
         {currentLocation.id !== project.defaultLocation && (
           <button type="button" className="link-button" onClick={() => setCurrentLocationId(project.defaultLocation)}>
             ← {project.title}
-          </button>
-        )}
-        {target.gm && currentLocation.image && (
-          <button type="button" className="link-button fog-toggle" onClick={currentLocation.fog ? clearFog : startFog}>
-            {currentLocation.fog ? "Clear fog" : "Start fog"}
           </button>
         )}
       </header>
@@ -136,8 +115,6 @@ export function PresentationApp() {
             selectedLinkId={selectedLinkId ?? undefined}
             onSelectLink={goToLink}
             fog={currentLocation.fog}
-            fogEditable={target.gm}
-            onToggleFogCell={toggleFogCell}
           />
         ) : (
           <div className="status">"{currentLocation.id}" has no image — nothing to render.</div>

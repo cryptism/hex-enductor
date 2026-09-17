@@ -51,7 +51,7 @@ async fn round_trips_a_command_over_ws_and_persists_it() {
 }
 
 #[tokio::test]
-async fn starts_and_toggles_fog_over_ws() {
+async fn starts_and_paints_fog_over_ws() {
     let port = start_server().await;
 
     let tmp = tempfile_project().await;
@@ -71,13 +71,28 @@ async fn starts_and_toggles_fog_over_ws() {
     let Message::Text(after_start_text) = after_start else { panic!("expected text") };
     assert!(after_start_text.contains("\"fog\""), "{after_start_text}");
 
-    let toggle = serde_json::json!({
-        "command": { "toggleFogCell": { "locationId": "town", "cell": "2,3" } }
+    // A whole click-drag stroke lands as one batch, not one command per cell.
+    let reveal = serde_json::json!({
+        "command": { "setFogCells": { "locationId": "town", "cells": ["2,3", "2,4"], "revealed": true } }
     });
-    ws.send(Message::Text(toggle.to_string())).await.expect("send toggleFogCell");
-    let after_toggle = ws.next().await.expect("state after toggleFogCell").expect("ok");
-    let Message::Text(after_toggle_text) = after_toggle else { panic!("expected text") };
-    assert!(after_toggle_text.contains("2,3"), "{after_toggle_text}");
+    ws.send(Message::Text(reveal.to_string())).await.expect("send setFogCells");
+    let after_reveal = ws.next().await.expect("state after setFogCells").expect("ok");
+    let Message::Text(after_reveal_text) = after_reveal else { panic!("expected text") };
+    assert!(after_reveal_text.contains("2,3") && after_reveal_text.contains("2,4"), "{after_reveal_text}");
+
+    // Painting the same cells revealed again is idempotent — no duplicate entries.
+    ws.send(Message::Text(reveal.to_string())).await.expect("send setFogCells again");
+    let after_repaint = ws.next().await.expect("state after re-painting").expect("ok");
+    let Message::Text(after_repaint_text) = after_repaint else { panic!("expected text") };
+    assert_eq!(after_repaint_text.matches("2,3").count(), 1, "{after_repaint_text}");
+
+    let hide = serde_json::json!({
+        "command": { "setFogCells": { "locationId": "town", "cells": ["2,3", "2,4"], "revealed": false } }
+    });
+    ws.send(Message::Text(hide.to_string())).await.expect("send setFogCells hide");
+    let after_hide = ws.next().await.expect("state after hiding").expect("ok");
+    let Message::Text(after_hide_text) = after_hide else { panic!("expected text") };
+    assert!(!after_hide_text.contains("2,3") && !after_hide_text.contains("2,4"), "{after_hide_text}");
 }
 
 async fn tempfile_project() -> std::path::PathBuf {

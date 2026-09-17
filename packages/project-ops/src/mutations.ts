@@ -107,17 +107,25 @@ export function setFog(project: HexenProject, locationId: string, fog: FogOfWar 
   return project;
 }
 
-export function toggleFogCell(project: HexenProject, locationId: string, cell: string): HexenProject {
+/**
+ * Sets a batch of cells' revealed state explicitly, rather than
+ * toggling, so repeatedly painting the same cell while dragging is
+ * idempotent. Plural rather than one call per cell so a whole
+ * click-drag stroke lands as a single command/broadcast.
+ */
+export function setFogCells(project: HexenProject, locationId: string, cellsToSet: string[], revealed: boolean): HexenProject {
   const location = findLocation(project, locationId);
   if (!location.fog) {
-    throw new Error(`Location "${locationId}" has no fog of war — start it before toggling a cell`);
+    throw new Error(`Location "${locationId}" has no fog of war — start it before setting cells`);
   }
-  const revealed = new Set(location.fog.revealedCells);
-  if (revealed.has(cell)) {
-    revealed.delete(cell);
-  } else {
-    revealed.add(cell);
+  const cells = new Set(location.fog.revealedCells);
+  for (const cell of cellsToSet) {
+    if (revealed) {
+      cells.add(cell);
+    } else {
+      cells.delete(cell);
+    }
   }
-  location.fog = { revealedCells: [...revealed] };
+  location.fog = { revealedCells: [...cells] };
   return project;
 }

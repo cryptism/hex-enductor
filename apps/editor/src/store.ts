@@ -13,9 +13,19 @@ interface AppState {
   // and whatever tools land later) behind an explicit switch, off by
   // default — reading a map at the table shouldn't risk changing it.
   editMode: boolean;
-  // A view toggle, not a safety gate — unlike editMode this carries
-  // across projects/locations rather than resetting, same as flipping
-  // "show rulers" would.
+  // A second, independent switch for fog-of-war: with gmMode alone you
+  // get a read-only "layers panel" view of the fog (see App.tsx) and a
+  // status readout of what players currently see; combined with
+  // editMode you also get the fog paint tool and blanket apply/remove.
+  // Independent of editMode on purpose — during live play a GM often
+  // wants map authoring locked while still checking/controlling fog.
+  gmMode: boolean;
+  // The fog paint tool's armed state, same idea as placingLocation —
+  // only meaningful with both editMode and gmMode on.
+  paintingFog: boolean;
+  // A view toggle, not a safety gate — unlike editMode/gmMode this
+  // carries across projects/locations rather than resetting, same as
+  // flipping "show rulers" would.
   gridVisible: boolean;
   // The Add Location tool's armed state — a click on the map places a
   // pin while this is true. Exited whenever the surrounding context
@@ -29,6 +39,8 @@ interface AppState {
   setCurrentLocation: (id: string | null) => void;
   selectLink: (id: string | null) => void;
   setEditMode: (editMode: boolean) => void;
+  setGmMode: (gmMode: boolean) => void;
+  setPaintingFog: (paintingFog: boolean) => void;
   setGridVisible: (gridVisible: boolean) => void;
   setPlacingLocation: (placingLocation: boolean) => void;
 }
@@ -39,6 +51,8 @@ function reset(storage: ProjectStorage) {
     currentLocationId: null,
     selectedLinkId: null,
     editMode: false,
+    gmMode: false,
+    paintingFog: false,
     placingLocation: false,
   };
 }
@@ -48,6 +62,8 @@ export const useAppStore = create<AppState>((set) => ({
   currentLocationId: null,
   selectedLinkId: null,
   editMode: false,
+  gmMode: false,
+  paintingFog: false,
   gridVisible: true,
   placingLocation: false,
   openServerProject: (path) => {
@@ -56,9 +72,12 @@ export const useAppStore = create<AppState>((set) => ({
   },
   setStorage: (storage) => set(reset(storage)),
   closeProject: () => set({ storage: null, currentLocationId: null, selectedLinkId: null }),
-  setCurrentLocation: (id) => set({ currentLocationId: id, selectedLinkId: null, placingLocation: false }),
+  setCurrentLocation: (id) =>
+    set({ currentLocationId: id, selectedLinkId: null, placingLocation: false, paintingFog: false }),
   selectLink: (id) => set({ selectedLinkId: id }),
-  setEditMode: (editMode) => set({ editMode, selectedLinkId: null, placingLocation: false }),
+  setEditMode: (editMode) => set({ editMode, selectedLinkId: null, placingLocation: false, paintingFog: false }),
+  setGmMode: (gmMode) => set({ gmMode, paintingFog: false }),
+  setPaintingFog: (paintingFog) => set({ paintingFog, selectedLinkId: null }),
   setGridVisible: (gridVisible) => set({ gridVisible }),
   setPlacingLocation: (placingLocation) => set({ placingLocation, selectedLinkId: null }),
 }));

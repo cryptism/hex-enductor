@@ -5,6 +5,7 @@ import { LinkForm } from "./LinkForm.tsx";
 import { LocationContentForm } from "./LocationContentForm.tsx";
 import { AddLocationForm } from "./AddLocationForm.tsx";
 import { ConfigureGridForm } from "./ConfigureGridForm.tsx";
+import { FogControls } from "./FogControls.tsx";
 import { ImageUpload } from "./ImageUpload.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { LocationBrowser } from "./LocationBrowser.tsx";
@@ -30,13 +31,26 @@ function App() {
   const currentLocationId = useAppStore((s) => s.currentLocationId);
   const selectedLinkId = useAppStore((s) => s.selectedLinkId);
   const editMode = useAppStore((s) => s.editMode);
+  const gmMode = useAppStore((s) => s.gmMode);
+  const paintingFog = useAppStore((s) => s.paintingFog);
   const gridVisible = useAppStore((s) => s.gridVisible);
   const placingLocation = useAppStore((s) => s.placingLocation);
   const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
   const selectLink = useAppStore((s) => s.selectLink);
   const setEditMode = useAppStore((s) => s.setEditMode);
+  const setGmMode = useAppStore((s) => s.setGmMode);
+  const setPaintingFog = useAppStore((s) => s.setPaintingFog);
   const setGridVisible = useAppStore((s) => s.setGridVisible);
   const setPlacingLocation = useAppStore((s) => s.setPlacingLocation);
+
+  // Purely a local view toggle — like Krita's layer-visibility eye
+  // icon, it lets the GM peek at the raw map under the fog without
+  // changing anything players see. Reset whenever GM mode is (re)
+  // entered so the fog layer always starts visible.
+  const [fogLayerVisible, setFogLayerVisible] = useState(true);
+  useEffect(() => {
+    if (gmMode) setFogLayerVisible(true);
+  }, [gmMode]);
 
   // The active backend's data — no more react-query: every storage
   // method already hands back the freshly reopened project, so a
@@ -105,7 +119,7 @@ function App() {
   useEffect(() => {
     setConfiguringGrid(false);
     setDraftGrid(null);
-  }, [currentLocationId, storage, editMode]);
+  }, [currentLocationId, storage, editMode, gmMode]);
 
   // The landing screen's picker, reopened as a panel over the editor —
   // switching projects, not editing this one, so it's available
@@ -206,6 +220,34 @@ function App() {
               <span className="mode-toggle-label">{editMode ? "Editing" : "Viewing"}</span>
             </label>
 
+            <label className="mode-toggle">
+              <input type="checkbox" checked={gmMode} onChange={(e) => setGmMode(e.target.checked)} />
+              <span className="mode-toggle-track" aria-hidden="true" />
+              <span className="mode-toggle-label">GM mode{gmMode ? " on" : " off"}</span>
+            </label>
+
+            {gmMode && currentLocation.image && (
+              <FogControls
+                key={currentLocation.id}
+                image={currentLocation.image}
+                fog={currentLocation.fog}
+                editMode={editMode}
+                layerVisible={fogLayerVisible}
+                onSetLayerVisible={setFogLayerVisible}
+                paintingFog={paintingFog}
+                onSetPaintingFog={(painting) => {
+                  if (painting) {
+                    setPlacingLocation(false);
+                    setConfiguringGrid(false);
+                    setDraftGrid(null);
+                    setFogLayerVisible(true);
+                  }
+                  setPaintingFog(painting);
+                }}
+                onSetFog={(fog) => storage.execute({ type: "setFog", locationId: currentLocation.id, fog })}
+              />
+            )}
+
             {editMode && (
               <div className="tool-row">
                 <button type="button" className="tool-button" onClick={() => storage.undo()}>
@@ -224,6 +266,7 @@ function App() {
                 onClick={() => {
                   setConfiguringGrid(false);
                   setDraftGrid(null);
+                  setPaintingFog(false);
                   setPlacingLocation(!placingLocation);
                 }}
               >
@@ -246,6 +289,7 @@ function App() {
                 className="tool-button"
                 onClick={() => {
                   setPlacingLocation(false);
+                  setPaintingFog(false);
                   setDraftGrid(currentLocation.grid);
                   setConfiguringGrid(true);
                 }}
@@ -328,6 +372,11 @@ function App() {
                   onSelectLink={selectLink}
                   placing={placingLocation && !configuringGrid}
                   onPlaceLocation={setPendingPoint}
+                  fog={gmMode && fogLayerVisible ? currentLocation.fog : null}
+                  fogEditable={paintingFog}
+                  onPaintFogCells={(cells, revealed) =>
+                    storage.execute({ type: "setFogCells", locationId: currentLocation.id, cells, revealed })
+                  }
                 />
                 <label className="grid-toggle">
                   <input type="checkbox" checked={gridVisible} onChange={(e) => setGridVisible(e.target.checked)} />

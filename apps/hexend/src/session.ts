@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { HexenProject } from "@hex-enductor/hexen-schema";
 import { applyCommand, CommandSchema } from "@hex-enductor/project-ops";
+import { openedProjectDataToWire } from "@hex-enductor/live-session";
 import { openProject, saveProject, type OpenedProject } from "./projectIO.ts";
 
 export interface SessionSocket {
@@ -25,13 +26,6 @@ export interface ProjectSession {
   /** The project as it stood before this session's first command — where undo bottoms out. */
   readonly baseSnapshot: HexenProject;
 }
-
-export const ClientMessageSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("command"), command: CommandSchema }),
-  z.object({ type: z.literal("undo") }),
-  z.object({ type: z.literal("redo") }),
-]);
-export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
 // Sessions live for the server process's lifetime, keyed by absolute
 // project path — no eviction. Fine at single-user/dev-server scale;
@@ -93,8 +87,12 @@ function persist(session: ProjectSession): void {
   });
 }
 
+// Wire format is hexen-rs's protobuf JSON mapping, not the app-level
+// `type`-discriminated shape sessionState returns — see
+// packages/live-session/src/wireFormat.ts, the one seam both servers
+// go through so a client never needs to know which one it's talking to.
 function broadcast(session: ProjectSession): void {
-  const message = JSON.stringify({ type: "state", data: sessionState(session) });
+  const message = JSON.stringify({ state: openedProjectDataToWire(sessionState(session)) });
   for (const socket of session.sockets) socket.send(message);
 }
 

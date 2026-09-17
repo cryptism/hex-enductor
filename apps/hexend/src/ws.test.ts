@@ -60,8 +60,8 @@ describe("GET /ws", () => {
 
     const clientA = await connect(path);
     const initialA = await nextMessage(clientA);
-    expect(initialA.type).toBe("state");
-    expect(initialA.data.project.title).toBe("Test Realm");
+    expect(initialA.state).toBeTruthy();
+    expect(initialA.state.project.title).toBe("Test Realm");
 
     const clientB = await connect(path);
     await nextMessage(clientB); // clientB's own initial state
@@ -72,16 +72,15 @@ describe("GET /ws", () => {
       Promise.resolve(
         clientA.send(
           JSON.stringify({
-            type: "command",
-            command: { type: "saveLink", locationId: "town", linkId: "front-door", patch: { hidden: true } },
+            command: { saveLink: { locationId: "town", linkId: "front-door", patch: { hidden: true } } },
           }),
         ),
       ),
     ]);
 
     for (const msg of [nextA, nextB]) {
-      expect(msg.type).toBe("state");
-      expect(msg.data.project.locations[0].links[0].hidden).toBe(true);
+      expect(msg.state).toBeTruthy();
+      expect(msg.state.project.locations[0].links[0].hidden).toBe(true);
     }
 
     await new Promise((r) => setTimeout(r, 20));

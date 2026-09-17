@@ -31,7 +31,7 @@ describe("CommandSchema", () => {
       { type: "saveGrid", locationId: "town", grid: null },
       { type: "saveImage", locationId: "town", image: null },
       { type: "setFog", locationId: "town", fog: { revealedCells: ["0,0"] } },
-      { type: "toggleFogCell", locationId: "town", cell: "0,0" },
+      { type: "setFogCells", locationId: "town", cells: ["0,0"], revealed: true },
     ];
     for (const command of commands) {
       expect(CommandSchema.safeParse(command).success).toBe(true);
@@ -79,11 +79,11 @@ describe("applyCommand", () => {
     expect(withoutGrid.locations[0]!.grid).toBeNull();
   });
 
-  test("dispatches setFog and toggleFogCell", () => {
+  test("dispatches setFog and setFogCells", () => {
     const started = applyCommand(fixture(), { type: "setFog", locationId: "town", fog: { revealedCells: [] } });
     expect(started.locations[0]!.fog).toEqual({ revealedCells: [] });
 
-    const revealed = applyCommand(started, { type: "toggleFogCell", locationId: "town", cell: "0,0" });
+    const revealed = applyCommand(started, { type: "setFogCells", locationId: "town", cells: ["0,0"], revealed: true });
     expect(revealed.locations[0]!.fog).toEqual({ revealedCells: ["0,0"] });
   });
 });

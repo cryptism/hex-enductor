@@ -189,10 +189,11 @@ pub fn set_fog(
     Ok(())
 }
 
-pub fn toggle_fog_cell(
+pub fn set_fog_cells(
     project: &mut HexenProject,
     location_id: &str,
-    cell: &str,
+    cells: &[String],
+    revealed: bool,
 ) -> Result<(), MutationError> {
     let location = find_location(project, location_id)?;
     let fog = location
@@ -200,10 +201,15 @@ pub fn toggle_fog_cell(
         .as_mut()
         .ok_or_else(|| MutationError::NoFog(location_id.to_string()))?;
 
-    if let Some(pos) = fog.revealed_cells.iter().position(|c| c == cell) {
-        fog.revealed_cells.remove(pos);
-    } else {
-        fog.revealed_cells.push(cell.to_string());
+    for cell in cells {
+        let pos = fog.revealed_cells.iter().position(|c| c == cell);
+        match (revealed, pos) {
+            (true, None) => fog.revealed_cells.push(cell.clone()),
+            (false, Some(pos)) => {
+                fog.revealed_cells.remove(pos);
+            }
+            _ => {}
+        }
     }
 
     Ok(())

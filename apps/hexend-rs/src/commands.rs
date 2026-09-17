@@ -2,7 +2,7 @@
 
 use crate::mutations::{
     add_location_link, save_grid, save_image, save_link, save_location_content, set_fog,
-    toggle_fog_cell, MutationError,
+    set_fog_cells, MutationError,
 };
 use crate::pb::hexen::v1::{command, Command, HexenProject};
 
@@ -25,7 +25,7 @@ pub fn apply_command(project: &mut HexenProject, command: Command) -> Result<(),
         Some(command::Kind::SaveGrid(c)) => save_grid(project, &c.location_id, c.grid),
         Some(command::Kind::SaveImage(c)) => save_image(project, &c.location_id, c.image),
         Some(command::Kind::SetFog(c)) => set_fog(project, &c.location_id, c.fog),
-        Some(command::Kind::ToggleFogCell(c)) => toggle_fog_cell(project, &c.location_id, &c.cell),
+        Some(command::Kind::SetFogCells(c)) => set_fog_cells(project, &c.location_id, &c.cells, c.revealed),
         None => Err(MutationError::EmptyCommand),
     }
 }

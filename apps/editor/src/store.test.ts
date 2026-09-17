@@ -42,6 +42,62 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().editMode).toBe(true);
   });
 
+  test("starts with GM mode off by default", () => {
+    expect(useAppStore.getState().gmMode).toBe(false);
+  });
+
+  test("opening a project drops GM mode back off", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().openServerProject("/tmp/test.hexen.yml");
+
+    expect(useAppStore.getState().gmMode).toBe(false);
+  });
+
+  test("GM mode and edit mode are independent switches", () => {
+    useAppStore.getState().setEditMode(false);
+    useAppStore.getState().setGmMode(true);
+
+    expect(useAppStore.getState().editMode).toBe(false);
+    expect(useAppStore.getState().gmMode).toBe(true);
+
+    useAppStore.getState().setEditMode(true);
+    expect(useAppStore.getState().gmMode).toBe(true);
+  });
+
+  test("turning off GM mode disarms the fog paint tool", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setPaintingFog(true);
+    useAppStore.getState().setGmMode(false);
+
+    expect(useAppStore.getState().paintingFog).toBe(false);
+  });
+
+  test("turning off edit mode disarms the fog paint tool", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setEditMode(true);
+    useAppStore.getState().setPaintingFog(true);
+    useAppStore.getState().setEditMode(false);
+
+    expect(useAppStore.getState().paintingFog).toBe(false);
+  });
+
+  test("switching location disarms the fog paint tool", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setEditMode(true);
+    useAppStore.getState().setPaintingFog(true);
+    useAppStore.getState().setCurrentLocation("inn");
+
+    expect(useAppStore.getState().paintingFog).toBe(false);
+  });
+
+  test("arming the fog paint tool clears link selection", () => {
+    useAppStore.getState().selectLink("inn");
+    useAppStore.getState().setPaintingFog(true);
+
+    expect(useAppStore.getState().selectedLinkId).toBeNull();
+    expect(useAppStore.getState().paintingFog).toBe(true);
+  });
+
   test("grid is visible by default, and survives opening a different project", () => {
     expect(useAppStore.getState().gridVisible).toBe(true);
 

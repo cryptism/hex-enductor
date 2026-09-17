@@ -76,13 +76,6 @@ body {
   padding: 0;
 }
 
-.presentation-header .fog-toggle {
-  margin-left: auto;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.3rem 0.8rem;
-}
-
 .presentation-links {
   border-top: 1px solid var(--border);
   background: var(--surface);

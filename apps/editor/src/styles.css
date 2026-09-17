@@ -83,7 +83,8 @@ body {
   cursor: pointer;
 }
 
-.leaflet-container.placing {
+.leaflet-container.placing,
+.leaflet-container.painting-fog {
   cursor: crosshair;
 }
 
@@ -107,6 +108,37 @@ body {
 
 .tool-row .tool-button {
   margin-bottom: 0;
+}
+
+.tool-button.danger {
+  border-color: #e08a7a;
+  color: #e08a7a;
+}
+
+.fog-controls {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.fog-controls .tool-row {
+  margin-bottom: 0;
+}
+
+.fog-status {
+  margin: 0 0 0.5rem;
+  font-size: 0.8em;
+  color: var(--dim);
+}
+
+.fog-layer-toggle {
+  position: static;
+  display: flex;
+  margin-bottom: 0.6rem;
+  background: none;
+  border: none;
+  padding: 0;
 }
 
 .image-upload {

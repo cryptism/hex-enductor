@@ -8,7 +8,7 @@ import {
   saveGrid,
   saveImage,
   setFog,
-  toggleFogCell,
+  setFogCells,
 } from "./mutations.ts";
 
 function fixture(): HexenProject {
@@ -169,21 +169,30 @@ describe("setFog", () => {
   });
 });
 
-describe("toggleFogCell", () => {
-  test("reveals then re-hides a cell", () => {
+describe("setFogCells", () => {
+  test("reveals then re-hides a batch of cells", () => {
     const started = setFog(fixture(), "town", { revealedCells: [] });
-    const revealed = toggleFogCell(started, "town", "2,3");
-    expect(revealed.locations[0]!.fog).toEqual({ revealedCells: ["2,3"] });
+    const revealed = setFogCells(started, "town", ["2,3", "2,4"], true);
+    expect(revealed.locations[0]!.fog!.revealedCells.sort()).toEqual(["2,3", "2,4"]);
 
-    const hidden = toggleFogCell(revealed, "town", "2,3");
+    const hidden = setFogCells(revealed, "town", ["2,3", "2,4"], false);
     expect(hidden.locations[0]!.fog).toEqual({ revealedCells: [] });
   });
 
+  test("is idempotent — painting the same state twice doesn't duplicate or error", () => {
+    const started = setFog(fixture(), "town", { revealedCells: [] });
+    const revealed = setFogCells(started, "town", ["2,3"], true);
+    expect(setFogCells(revealed, "town", ["2,3"], true).locations[0]!.fog).toEqual({ revealedCells: ["2,3"] });
+
+    const hidden = setFogCells(revealed, "town", ["2,3"], false);
+    expect(setFogCells(hidden, "town", ["2,3"], false).locations[0]!.fog).toEqual({ revealedCells: [] });
+  });
+
   test("throws when the location has no fog started", () => {
-    expect(() => toggleFogCell(fixture(), "town", "2,3")).toThrow(/no fog of war/);
+    expect(() => setFogCells(fixture(), "town", ["2,3"], true)).toThrow(/no fog of war/);
   });
 
   test("throws on an unknown location", () => {
-    expect(() => toggleFogCell(fixture(), "nowhere", "2,3")).toThrow(/No location "nowhere"/);
+    expect(() => setFogCells(fixture(), "nowhere", ["2,3"], true)).toThrow(/No location "nowhere"/);
   });
 });

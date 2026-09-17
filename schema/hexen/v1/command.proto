@@ -67,11 +67,16 @@ message SetFogCommand {
   FogOfWar fog = 2;
 }
 
-// Flips one opaque cell key between revealed and hidden. Errors if the
+// Sets a batch of opaque cell keys' revealed state explicitly (rather
+// than toggling) so repeatedly painting over the same cell during a
+// click-drag is idempotent. Plural rather than one-command-per-cell so
+// a whole click-drag stroke lands (and broadcasts) as a single state
+// change instead of flickering through one per cell. Errors if the
 // location has no fog started yet — see SetFogCommand.
-message ToggleFogCellCommand {
+message SetFogCellsCommand {
   string location_id = 1;
-  string cell = 2;
+  repeated string cells = 2;
+  bool revealed = 3;
 }
 
 // Every interaction that mutates a HexenProject, as data — the same
@@ -85,6 +90,6 @@ message Command {
     SaveGridCommand save_grid = 4;
     SaveImageCommand save_image = 5;
     SetFogCommand set_fog = 6;
-    ToggleFogCellCommand toggle_fog_cell = 7;
+    SetFogCellsCommand set_fog_cells = 7;
   }
 }

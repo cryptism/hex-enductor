@@ -6,7 +6,8 @@ import { trpcServer } from "@hono/trpc-server";
 import { upgradeWebSocket, websocket } from "hono/bun";
 import { appRouter } from "./router.ts";
 import { readImageSize } from "@hex-enductor/project-ops";
-import { getOrCreateSession, applyAndBroadcast, undo, redo, sessionState, ClientMessageSchema, type SessionSocket } from "./session.ts";
+import { commandFromWire, openedProjectDataToWire } from "@hex-enductor/live-session";
+import { getOrCreateSession, applyAndBroadcast, undo, redo, sessionState, type SessionSocket } from "./session.ts";
 
 export { websocket };
 
@@ -114,7 +115,7 @@ app.get(
         sessionPromise = getOrCreateSession(path);
         const session = await sessionPromise;
         session.sockets.add(ws as SessionSocket);
-        ws.send(JSON.stringify({ type: "state", data: sessionState(session) }));
+        ws.send(JSON.stringify({ state: openedProjectDataToWire(sessionState(session)) }));
       },
       async onMessage(evt, ws) {
         if (!sessionPromise || typeof evt.data !== "string") return;
@@ -125,12 +126,17 @@ app.get(
         } catch {
           return;
         }
-        const parsed = ClientMessageSchema.safeParse(raw);
-        if (!parsed.success) return;
+        if (typeof raw !== "object" || raw === null) return;
+        const message = raw as Record<string, unknown>;
 
-        if (parsed.data.type === "command") applyAndBroadcast(session, parsed.data.command);
-        else if (parsed.data.type === "undo") undo(session);
-        else redo(session);
+        if (message.command) {
+          const command = commandFromWire(message.command as Record<string, unknown>);
+          if (command) applyAndBroadcast(session, command);
+        } else if (message.undo) {
+          undo(session);
+        } else if (message.redo) {
+          redo(session);
+        }
       },
       async onClose(_evt, ws) {
         if (!sessionPromise) return;

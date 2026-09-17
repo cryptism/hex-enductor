@@ -65,11 +65,9 @@ describe("applyAndBroadcast", () => {
 
     expect(session.project.locations[0]!.links[0]!.hidden).toBe(true);
     for (const socket of [a, b]) {
-      const [msg] = socket.messages;
-      expect((msg as { type: string }).type).toBe("state");
-      expect((msg as { data: { project: typeof session.project } }).data.project.locations[0]!.links[0]!.hidden).toBe(
-        true,
-      );
+      const [msg] = socket.messages as [{ state: { project: { locations: { links: { hidden: boolean }[] }[] } } }];
+      expect(msg.state).toBeTruthy();
+      expect(msg.state.project.locations[0]!.links[0]!.hidden).toBe(true);
     }
 
     // Persistence is fire-and-forget — give the disk write a turn to land.

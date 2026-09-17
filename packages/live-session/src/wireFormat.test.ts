@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import type { Grid, LocationContent, ProjectContent } from "@hex-enductor/hexen-schema";
+import type { Grid, HexenProject, LocationContent, ProjectContent } from "@hex-enductor/hexen-schema";
 import {
+  commandFromWire,
   commandToWire,
   gridFromWire,
   gridToWire,
   locationContentFromWire,
   locationContentToWire,
   openedProjectDataFromWire,
+  openedProjectDataToWire,
   projectContentFromWire,
   projectContentToWire,
 } from "./wireFormat.ts";
@@ -77,12 +79,59 @@ describe("commandToWire", () => {
   });
 
   test("passes plain-field commands through untouched", () => {
-    expect(commandToWire({ type: "toggleFogCell", locationId: "town", cell: "2,3" })).toEqual({
-      toggleFogCell: { locationId: "town", cell: "2,3" },
+    expect(commandToWire({ type: "setFogCells", locationId: "town", cells: ["2,3", "2,4"], revealed: true })).toEqual({
+      setFogCells: { locationId: "town", cells: ["2,3", "2,4"], revealed: true },
     });
     expect(commandToWire({ type: "setFog", locationId: "town", fog: null })).toEqual({
       setFog: { locationId: "town", fog: null },
     });
+  });
+});
+
+describe("commandFromWire", () => {
+  test("is the inverse of commandToWire for every command variant", () => {
+    const commands: Parameters<typeof commandToWire>[0][] = [
+      { type: "saveLink", locationId: "town", linkId: "front-door", patch: { hidden: true } },
+      { type: "saveLocationContent", locationId: "town", patch: { body: "Updated." } },
+      { type: "addLocationLink", parentLocationId: "town", targetLocationId: "old-mill", x: 1, y: 2, linkType: "landmark" },
+      { type: "saveGrid", locationId: "town", grid: HEX_GRID },
+      { type: "saveGrid", locationId: "town", grid: null },
+      { type: "saveImage", locationId: "town", image: { file: "_assets/town.png", width: 400, height: 400 } },
+      { type: "setFog", locationId: "town", fog: { revealedCells: ["0,0"] } },
+      { type: "setFogCells", locationId: "town", cells: ["2,3", "2,4"], revealed: false },
+    ];
+    for (const command of commands) {
+      expect(commandFromWire(commandToWire(command) as Record<string, any>)).toEqual(command);
+    }
+  });
+
+  test("returns null for an unrecognized shape", () => {
+    expect(commandFromWire({})).toBeNull();
+    expect(commandFromWire({ deleteEverything: {} })).toBeNull();
+  });
+});
+
+describe("openedProjectDataToWire", () => {
+  test("is the inverse of openedProjectDataFromWire for a full project", () => {
+    const project: HexenProject = {
+      schemaVersion: 1,
+      title: "Demo",
+      defaultLocation: "town",
+      content: { type: "obsidian", vaultRoot: "_vault" },
+      locations: [
+        {
+          id: "town",
+          grid: HEX_GRID,
+          image: { file: "_assets/town.png", width: 400, height: 400 },
+          content: { type: "inline", title: "The Town", body: "Hello." },
+          links: [{ id: "front-door", target: "inn", x: 1, y: 1, type: "settlement", color: null, hidden: false }],
+          fog: { revealedCells: ["0,0"] },
+        },
+        { id: "inn", grid: null, image: null, content: null, links: [], fog: null },
+      ],
+    };
+    const data = { project, warnings: ["a warning"], resolvedContent: {}, resolveErrors: {} };
+    expect(openedProjectDataFromWire(openedProjectDataToWire(data) as any)).toEqual(data);
   });
 });
 

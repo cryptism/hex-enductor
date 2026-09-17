@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { GridSchema, ImageRefSchema, LinkSchema, InlineLocationContentSchema, FogOfWarSchema, type HexenProject } from "@hex-enductor/hexen-schema";
-import { saveLink, saveLocationContent, addLocationLink, saveGrid, saveImage, setFog, toggleFogCell } from "./mutations.ts";
+import { saveLink, saveLocationContent, addLocationLink, saveGrid, saveImage, setFog, setFogCells } from "./mutations.ts";
 
 const LinkPatchSchema = LinkSchema.partial();
 const InlineContentPatchSchema = InlineLocationContentSchema.omit({ type: true }).partial();
@@ -48,10 +48,11 @@ export const SetFogCommandSchema = z.object({
   fog: FogOfWarSchema.nullable(),
 });
 
-export const ToggleFogCellCommandSchema = z.object({
-  type: z.literal("toggleFogCell"),
+export const SetFogCellsCommandSchema = z.object({
+  type: z.literal("setFogCells"),
   locationId: z.string(),
-  cell: z.string(),
+  cells: z.array(z.string()),
+  revealed: z.boolean(),
 });
 
 /**
@@ -69,7 +70,7 @@ export const CommandSchema = z.discriminatedUnion("type", [
   SaveGridCommandSchema,
   SaveImageCommandSchema,
   SetFogCommandSchema,
-  ToggleFogCellCommandSchema,
+  SetFogCellsCommandSchema,
 ]);
 export type Command = z.infer<typeof CommandSchema>;
 
@@ -94,7 +95,7 @@ export function applyCommand(project: HexenProject, command: Command): HexenProj
       return saveImage(project, command.locationId, command.image);
     case "setFog":
       return setFog(project, command.locationId, command.fog);
-    case "toggleFogCell":
-      return toggleFogCell(project, command.locationId, command.cell);
+    case "setFogCells":
+      return setFogCells(project, command.locationId, command.cells, command.revealed);
   }
 }

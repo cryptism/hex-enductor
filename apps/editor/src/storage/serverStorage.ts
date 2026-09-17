@@ -1,6 +1,6 @@
 import { connectLiveSession, type LiveSession } from "@hex-enductor/live-session";
 import { serverUrl } from "../trpc.ts";
-import type { ProjectStorage } from "./types.ts";
+import type { OpenedProjectData, ProjectStorage } from "./types.ts";
 
 function dirname(path: string): string {
   const i = path.lastIndexOf("/");
@@ -17,18 +17,27 @@ function extensionFor(file: File): string | null {
 /** Wraps hexend's live /ws session — the storage backend the app has had all along, just server-authoritative now. */
 export function createServerStorage(path: string): ProjectStorage {
   let session: LiveSession | null = null;
+  // Registered before open() necessarily resolves — App.tsx's own
+  // "open" and "subscribe" effects both fire in the same commit, with
+  // no guarantee of which runs first, so subscribe can't require a
+  // session to already exist (mirrors localFsStorage, which never
+  // gates on anything either).
+  const listeners = new Set<(data: OpenedProjectData) => void>();
 
   return {
     label: path,
 
     async open() {
       session = await connectLiveSession(serverUrl(), path);
+      session.subscribe((data) => {
+        for (const listener of listeners) listener(data);
+      });
       return session.initial;
     },
 
     subscribe(onUpdate) {
-      if (!session) throw new Error("open() hasn't resolved yet");
-      return session.subscribe(onUpdate);
+      listeners.add(onUpdate);
+      return () => listeners.delete(onUpdate);
     },
 
     execute(command) {

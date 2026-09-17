@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CRS, divIcon } from "leaflet";
 import { MapContainer, ImageOverlay, Polygon, Marker, Popup, useMapEvents } from "react-leaflet";
 import type { FogOfWar, Grid, ImageRef, Link, Point } from "@hex-enductor/hexen-schema";
@@ -19,14 +19,84 @@ function ClickToPlace({ imageHeight, onPlace }: { imageHeight: number; onPlace: 
   return null;
 }
 
-// Mounted only in fog-editable mode — clicking anywhere on the map
-// (not on a marker, which intercepts its own click) toggles whichever
-// fog cell the click landed in. The fog polygons themselves are
-// non-interactive so clicks always reach here.
-function FogClickHandler({ imageHeight, onToggle }: { imageHeight: number; onToggle: (cell: string) => void }) {
-  useMapEvents({
-    click: (e) => onToggle(fogCellAt(latLngToPx(imageHeight, e.latlng))),
+// How often a held-down paint stroke flushes its touched cells as one
+// setFogCells command — batched so a fast drag across many cells lands
+// (and broadcasts to every other viewer) as a handful of updates, not
+// one per cell.
+const FOG_PAINT_FLUSH_MS = 80;
+
+const FOG_OPACITY = 0.92;
+// Held down while painting, the fog layer dims so the GM can see what
+// they're about to re-cover instead of painting blind.
+const FOG_OPACITY_ERASING = 0.35;
+
+// Mounted only in fog-editable mode. Click-drag reveals whichever fog
+// cells the cursor passes over; holding shift at the start of the
+// stroke restores fog (hides) instead — the same mechanism, just the
+// opposite direction, decided once per stroke. Disables map panning
+// for the duration so a drag paints instead of scrolling the map.
+function FogPaintHandler({
+  imageHeight,
+  onPaint,
+}: {
+  imageHeight: number;
+  onPaint: (cells: string[], revealed: boolean) => void;
+}) {
+  const stroke = useRef<{
+    revealed: boolean;
+    pending: Set<string>;
+    lastCell: string | null;
+    flushTimer: ReturnType<typeof setInterval>;
+  } | null>(null);
+
+  function flush() {
+    const s = stroke.current;
+    if (!s || s.pending.size === 0) return;
+    onPaint([...s.pending], s.revealed);
+    s.pending.clear();
+  }
+
+  function endStroke() {
+    const s = stroke.current;
+    if (!s) return;
+    clearInterval(s.flushTimer);
+    flush();
+    stroke.current = null;
+  }
+
+  const map = useMapEvents({
+    mousedown: (e) => {
+      const revealed = !(e.originalEvent as MouseEvent).shiftKey;
+      const cell = fogCellAt(latLngToPx(imageHeight, e.latlng));
+      stroke.current = {
+        revealed,
+        pending: new Set([cell]),
+        lastCell: cell,
+        flushTimer: setInterval(flush, FOG_PAINT_FLUSH_MS),
+      };
+    },
+    mousemove: (e) => {
+      const s = stroke.current;
+      if (!s) return;
+      const cell = fogCellAt(latLngToPx(imageHeight, e.latlng));
+      if (cell === s.lastCell) return;
+      s.lastCell = cell;
+      s.pending.add(cell);
+    },
+    mouseup: endStroke,
   });
+
+  useEffect(() => {
+    map.dragging.disable();
+    window.addEventListener("mouseup", endStroke);
+    return () => {
+      map.dragging.enable();
+      window.removeEventListener("mouseup", endStroke);
+      endStroke();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
+
   return null;
 }
 
@@ -49,9 +119,9 @@ export interface MapCanvasProps {
   readOnly?: boolean;
   /** Null/absent means fog is off for this Location — nothing is drawn. */
   fog?: FogOfWar | null;
-  /** While true (and fog is present), clicking the map toggles that fog cell instead of panning-only. */
+  /** While true (and fog is present), click-drag paints fog cells instead of panning the map. */
   fogEditable?: boolean;
-  onToggleFogCell?: (cell: string) => void;
+  onPaintFogCells?: (cells: string[], revealed: boolean) => void;
 }
 
 const DEFAULT_MARKER_COLOR = "#c19a5f";
@@ -70,7 +140,7 @@ export function MapCanvas({
   readOnly = false,
   fog = null,
   fogEditable = false,
-  onToggleFogCell,
+  onPaintFogCells,
 }: MapCanvasProps) {
   const bounds: [[number, number], [number, number]] = [
     [0, 0],
@@ -94,11 +164,35 @@ export function MapCanvas({
     });
   }, [fog, image.width, image.height]);
 
+  // Only tracked while the paint tool is armed — holding shift previews
+  // erase mode by dimming the fog layer, same key FogPaintHandler reads
+  // to decide a stroke's direction.
+  const [shiftHeld, setShiftHeld] = useState(false);
+  useEffect(() => {
+    if (!fogEditable) {
+      setShiftHeld(false);
+      return;
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Shift") setShiftHeld(true);
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === "Shift") setShiftHeld(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      setShiftHeld(false);
+    };
+  }, [fogEditable]);
+
   return (
     <MapContainer
       crs={CRS.Simple}
       bounds={bounds}
-      className={placing ? "placing" : undefined}
+      className={placing ? "placing" : fogEditable && fog ? "painting-fog" : undefined}
       style={{ width: "100%", height: "100%", background: "#12150f" }}
       zoomSnap={0.25}
       minZoom={-4}
@@ -106,8 +200,8 @@ export function MapCanvas({
       attributionControl={false}
     >
       {placing && onPlaceLocation && <ClickToPlace imageHeight={image.height} onPlace={onPlaceLocation} />}
-      {fogEditable && fog && onToggleFogCell && (
-        <FogClickHandler imageHeight={image.height} onToggle={onToggleFogCell} />
+      {fogEditable && fog && onPaintFogCells && (
+        <FogPaintHandler imageHeight={image.height} onPaint={onPaintFogCells} />
       )}
       <ImageOverlay url={imageUrl} bounds={bounds} />
 
@@ -180,7 +274,7 @@ export function MapCanvas({
           pathOptions={{
             color: "transparent",
             fillColor: "#0a0a08",
-            fillOpacity: 0.92,
+            fillOpacity: shiftHeld ? FOG_OPACITY_ERASING : FOG_OPACITY,
             interactive: false,
           }}
         />
