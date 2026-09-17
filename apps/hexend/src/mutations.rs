@@ -17,8 +17,10 @@ pub enum MutationError {
     NoLink(String, String),
     #[error("Location \"{0}\" has {1} content, not inline")]
     NotInlineContent(String, &'static str),
-    #[error("Location \"{0}\" has no fog of war — start it before toggling a cell")]
+    #[error("Location \"{0}\" has no fog of war — start it before setting cells")]
     NoFog(String),
+    #[error("Location \"{0}\" already exists")]
+    LocationExists(String),
     #[error("Command message carried no command")]
     EmptyCommand,
 }
@@ -53,6 +55,21 @@ fn find_location<'a>(
         .iter_mut()
         .find(|l| l.id == location_id)
         .ok_or_else(|| MutationError::NoLocation(location_id.to_string()))
+}
+
+pub fn add_location(project: &mut HexenProject, location_id: &str) -> Result<(), MutationError> {
+    if project.locations.iter().any(|l| l.id == location_id) {
+        return Err(MutationError::LocationExists(location_id.to_string()));
+    }
+    project.locations.push(Location {
+        id: location_id.to_string(),
+        grid: None,
+        image: None,
+        content: None,
+        links: vec![],
+        fog: None,
+    });
+    Ok(())
 }
 
 pub fn save_link(

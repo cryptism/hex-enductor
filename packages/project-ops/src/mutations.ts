@@ -30,6 +30,15 @@ function findLocation(project: HexenProject, locationId: string): Location {
   return location;
 }
 
+/** Adds a new, bare Location — not pinned from anywhere. The counterpart to addLocationLink's own "create the target if it doesn't exist yet" behavior, for a map you want staged before it's linked in. */
+export function addLocation(project: HexenProject, locationId: string): HexenProject {
+  if (project.locations.some((l) => l.id === locationId)) {
+    throw new Error(`Location "${locationId}" already exists`);
+  }
+  project.locations.push({ id: locationId, grid: null, image: null, content: null, links: [], fog: null });
+  return project;
+}
+
 export function saveLink(
   project: HexenProject,
   locationId: string,

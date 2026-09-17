@@ -48,6 +48,15 @@ message AddLocationLinkCommand {
   string link_type = 5;
 }
 
+// Adds a new, bare Location — no grid, image, content, or links — not
+// pinned from anywhere. Errors if a Location with this id already
+// exists. The counterpart to AddLocationLinkCommand's own "create the
+// target if it doesn't exist yet" behavior, for a map you want staged
+// before it's linked in from anywhere.
+message AddLocationCommand {
+  string location_id = 1;
+}
+
 message SaveGridCommand {
   string location_id = 1;
   // Absent means "clear the grid" — mirrors GridSchema.nullable().
@@ -91,5 +100,6 @@ message Command {
     SaveImageCommand save_image = 5;
     SetFogCommand set_fog = 6;
     SetFogCellsCommand set_fog_cells = 7;
+    AddLocationCommand add_location = 8;
   }
 }

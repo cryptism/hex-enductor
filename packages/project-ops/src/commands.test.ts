@@ -32,6 +32,7 @@ describe("CommandSchema", () => {
       { type: "saveImage", locationId: "town", image: null },
       { type: "setFog", locationId: "town", fog: { revealedCells: ["0,0"] } },
       { type: "setFogCells", locationId: "town", cells: ["0,0"], revealed: true },
+      { type: "addLocation", locationId: "staged-map" },
     ];
     for (const command of commands) {
       expect(CommandSchema.safeParse(command).success).toBe(true);
@@ -85,5 +86,10 @@ describe("applyCommand", () => {
 
     const revealed = applyCommand(started, { type: "setFogCells", locationId: "town", cells: ["0,0"], revealed: true });
     expect(revealed.locations[0]!.fog).toEqual({ revealedCells: ["0,0"] });
+  });
+
+  test("dispatches addLocation", () => {
+    const project = applyCommand(fixture(), { type: "addLocation", locationId: "staged-map" });
+    expect(project.locations.find((l) => l.id === "staged-map")).toBeTruthy();
   });
 });

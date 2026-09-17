@@ -1,8 +1,8 @@
 //! The Command union's reducer. Port of packages/project-ops/src/commands.ts.
 
 use crate::mutations::{
-    add_location_link, save_grid, save_image, save_link, save_location_content, set_fog,
-    set_fog_cells, MutationError,
+    add_location, add_location_link, save_grid, save_image, save_link, save_location_content,
+    set_fog, set_fog_cells, MutationError,
 };
 use crate::pb::hexen::v1::{command, Command, HexenProject};
 
@@ -26,6 +26,7 @@ pub fn apply_command(project: &mut HexenProject, command: Command) -> Result<(),
         Some(command::Kind::SaveImage(c)) => save_image(project, &c.location_id, c.image),
         Some(command::Kind::SetFog(c)) => set_fog(project, &c.location_id, c.fog),
         Some(command::Kind::SetFogCells(c)) => set_fog_cells(project, &c.location_id, &c.cells, c.revealed),
+        Some(command::Kind::AddLocation(c)) => add_location(project, &c.location_id),
         None => Err(MutationError::EmptyCommand),
     }
 }

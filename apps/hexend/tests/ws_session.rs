@@ -51,6 +51,32 @@ async fn round_trips_a_command_over_ws_and_persists_it() {
 }
 
 #[tokio::test]
+async fn adds_an_orphan_location_over_ws() {
+    let port = start_server().await;
+
+    let tmp = tempfile_project().await;
+    let url = format!(
+        "ws://127.0.0.1:{port}/ws?path={}",
+        urlencoding_lite(tmp.to_str().unwrap())
+    );
+
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.expect("connect");
+    ws.next().await.expect("initial message").expect("ok");
+
+    let add = serde_json::json!({
+        "command": { "addLocation": { "locationId": "staged-map" } }
+    });
+    ws.send(Message::Text(add.to_string())).await.expect("send addLocation");
+    let after_add = ws.next().await.expect("state after addLocation").expect("ok");
+    let Message::Text(after_add_text) = after_add else { panic!("expected text") };
+    assert!(after_add_text.contains("staged-map"), "{after_add_text}");
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let saved = tokio::fs::read_to_string(&tmp).await.unwrap();
+    assert!(saved.contains("staged-map"));
+}
+
+#[tokio::test]
 async fn starts_and_paints_fog_over_ws() {
     let port = start_server().await;
 

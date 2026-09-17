@@ -140,5 +140,7 @@ export function commandToWire(command: Command): object {
       return { setFog: { locationId: command.locationId, fog: command.fog } };
     case "setFogCells":
       return { setFogCells: { locationId: command.locationId, cells: command.cells, revealed: command.revealed } };
+    case "addLocation":
+      return { addLocation: { locationId: command.locationId } };
   }
 }

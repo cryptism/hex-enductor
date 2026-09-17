@@ -84,6 +84,9 @@ describe("commandToWire", () => {
     expect(commandToWire({ type: "setFog", locationId: "town", fog: null })).toEqual({
       setFog: { locationId: "town", fog: null },
     });
+    expect(commandToWire({ type: "addLocation", locationId: "staged-map" })).toEqual({
+      addLocation: { locationId: "staged-map" },
+    });
   });
 });
 

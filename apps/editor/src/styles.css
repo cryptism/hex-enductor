@@ -294,6 +294,21 @@ body {
   margin: 0;
 }
 
+.browser-filters {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8em;
+  color: var(--dim);
+}
+
+.browser-filters label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

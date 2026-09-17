@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { GridSchema, ImageRefSchema, LinkSchema, InlineLocationContentSchema, FogOfWarSchema, type HexenProject } from "@hex-enductor/hexen-schema";
-import { saveLink, saveLocationContent, addLocationLink, saveGrid, saveImage, setFog, setFogCells } from "./mutations.ts";
+import { saveLink, saveLocationContent, addLocationLink, addLocation, saveGrid, saveImage, setFog, setFogCells } from "./mutations.ts";
 
 const LinkPatchSchema = LinkSchema.partial();
 const InlineContentPatchSchema = InlineLocationContentSchema.omit({ type: true }).partial();
@@ -55,6 +55,11 @@ export const SetFogCellsCommandSchema = z.object({
   revealed: z.boolean(),
 });
 
+export const AddLocationCommandSchema = z.object({
+  type: z.literal("addLocation"),
+  locationId: z.string().min(1),
+});
+
 /**
  * Every interaction that mutates a HexenProject, as data — the same
  * shape whether it arrives over hexend's WS session or is applied
@@ -71,6 +76,7 @@ export const CommandSchema = z.discriminatedUnion("type", [
   SaveImageCommandSchema,
   SetFogCommandSchema,
   SetFogCellsCommandSchema,
+  AddLocationCommandSchema,
 ]);
 export type Command = z.infer<typeof CommandSchema>;
 
@@ -97,5 +103,7 @@ export function applyCommand(project: HexenProject, command: Command): HexenProj
       return setFog(project, command.locationId, command.fog);
     case "setFogCells":
       return setFogCells(project, command.locationId, command.cells, command.revealed);
+    case "addLocation":
+      return addLocation(project, command.locationId);
   }
 }

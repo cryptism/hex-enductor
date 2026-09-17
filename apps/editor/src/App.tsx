@@ -497,6 +497,8 @@ function App() {
               currentLocationId={currentLocationId}
               onSelect={setCurrentLocation}
               onClose={() => setBrowserOpen(false)}
+              editMode={editMode}
+              storage={storage}
             />
           </div>
         </div>

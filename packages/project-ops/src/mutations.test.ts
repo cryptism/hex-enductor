@@ -5,6 +5,7 @@ import {
   saveLink,
   saveLocationContent,
   addLocationLink,
+  addLocation,
   saveGrid,
   saveImage,
   setFog,
@@ -123,6 +124,25 @@ describe("addLocationLink", () => {
     expect(linksToInn).toHaveLength(2);
     expect(new Set(linksToInn.map((l) => l.id)).size).toBe(2);
     expect(project.locations.filter((l) => l.id === "inn")).toHaveLength(1);
+  });
+});
+
+describe("addLocation", () => {
+  test("adds a bare, unlinked Location", () => {
+    const project = addLocation(fixture(), "staged-map");
+    expect(project.locations.find((l) => l.id === "staged-map")).toEqual({
+      id: "staged-map",
+      grid: null,
+      image: null,
+      content: null,
+      links: [],
+      fog: null,
+    });
+    expect(project.locations[0]!.links).toHaveLength(1); // town's own links are untouched
+  });
+
+  test("throws if a Location with that id already exists", () => {
+    expect(() => addLocation(fixture(), "inn")).toThrow(/already exists/);
   });
 });
 
