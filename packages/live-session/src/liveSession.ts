@@ -2,6 +2,12 @@ import type { Command } from "@hex-enductor/project-ops";
 import type { OpenedProjectData } from "./protocol.ts";
 import { commandToWire, openedProjectDataFromWire } from "./wireFormat.ts";
 
+export interface PingEvent {
+  locationId: string;
+  x: number;
+  y: number;
+}
+
 /**
  * A live connection to one project's session on hexend. `initial` is
  * the state at the moment of connecting; every state after that —
@@ -11,28 +17,38 @@ import { commandToWire, openedProjectDataFromWire } from "./wireFormat.ts";
  * a client never applies a command locally and just waits to be told
  * what actually happened.
  *
+ * `ping`/`onPing` are the one exception to all of that: purely
+ * ephemeral, never touches project state, never persisted — hexend
+ * just re-broadcasts it verbatim to every socket watching the same
+ * session, sender included.
+ *
  * A read-only consumer (the presentation app) is exactly this same
- * type, minus ever calling `execute`/`undo`/`redo` — there's no
+ * type, minus ever calling `execute`/`undo`/`redo`/`ping` — there's no
  * separate read-only variant to keep in sync.
  */
 export interface LiveSession {
   readonly initial: OpenedProjectData;
   subscribe(onUpdate: (data: OpenedProjectData) => void): () => void;
+  onPing(onPing: (ping: PingEvent) => void): () => void;
   execute(command: Command): void;
+  ping(locationId: string, x: number, y: number): void;
   undo(): void;
   redo(): void;
   close(): void;
 }
 
 // hexend's ServerMessage — protobuf JSON mapping, not a discriminated
-// union: `state` is just this message's one field, and its own
-// oneof-shaped fields still need wireFormat.ts's conversion.
+// union: `state`/`ping` are just this message's two fields (a proto
+// oneof, but that's invisible in JSON — only one is ever present at a
+// time). `state`'s own oneof-shaped fields still need
+// wireFormat.ts's conversion; `ping`'s fields are all plain.
 interface WireServerMessage {
   state?: Parameters<typeof openedProjectDataFromWire>[0];
+  ping?: PingEvent;
 }
 
 function isWireServerMessage(value: unknown): value is WireServerMessage {
-  return typeof value === "object" && value !== null && "state" in value;
+  return typeof value === "object" && value !== null && ("state" in value || "ping" in value);
 }
 
 function wsUrl(serverUrl: string, path: string): string {
@@ -43,6 +59,7 @@ export function connectLiveSession(serverUrl: string, path: string): Promise<Liv
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(wsUrl(serverUrl, path));
     const listeners = new Set<(data: OpenedProjectData) => void>();
+    const pingListeners = new Set<(ping: PingEvent) => void>();
     let settled = false;
 
     socket.addEventListener("error", () => {
@@ -59,9 +76,11 @@ export function connectLiveSession(serverUrl: string, path: string): Promise<Liv
       }
     });
 
-    // The very first "state" message is the handshake — it resolves
-    // this promise instead of going to `subscribe` listeners, since
-    // nothing could have registered one before this function returns.
+    // The very first message is always a "state" handshake — it
+    // resolves this promise instead of going to `subscribe` listeners,
+    // since nothing could have registered one before this function
+    // returns. A "ping" can never arrive first in practice, but is
+    // handled defensively (ignored) if it somehow did.
     socket.addEventListener("message", (evt) => {
       if (typeof evt.data !== "string") return;
       let message: unknown;
@@ -70,7 +89,13 @@ export function connectLiveSession(serverUrl: string, path: string): Promise<Liv
       } catch {
         return;
       }
-      if (!isWireServerMessage(message) || !message.state) return;
+      if (!isWireServerMessage(message)) return;
+
+      if (message.ping) {
+        for (const listener of pingListeners) listener(message.ping);
+        return;
+      }
+      if (!message.state) return;
       const data = openedProjectDataFromWire(message.state);
 
       if (!settled) {
@@ -81,8 +106,15 @@ export function connectLiveSession(serverUrl: string, path: string): Promise<Liv
             listeners.add(onUpdate);
             return () => listeners.delete(onUpdate);
           },
+          onPing(onPing) {
+            pingListeners.add(onPing);
+            return () => pingListeners.delete(onPing);
+          },
           execute(command) {
             socket.send(JSON.stringify({ command: commandToWire(command) }));
+          },
+          ping(locationId, x, y) {
+            socket.send(JSON.stringify({ ping: { locationId, x, y } }));
           },
           undo() {
             socket.send(JSON.stringify({ undo: {} }));

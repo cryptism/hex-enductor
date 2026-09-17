@@ -11,7 +11,9 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::commands::apply_command;
 use crate::mutations::MutationError;
-use crate::pb::hexen::v1::{location_content, Command, HexenProject, OpenedProjectData, ResolvedContent, ServerMessage};
+use crate::pb::hexen::v1::{
+    location_content, server_message, Command, HexenProject, OpenedProjectData, Ping, ResolvedContent, ServerMessage,
+};
 use crate::project_io::{open_project, save_project, OpenError};
 use crate::resolver::resolve_inline_content;
 
@@ -124,7 +126,20 @@ fn persist(session: &ProjectSession) {
 
 fn broadcast(session: &ProjectSession) {
     let message = ServerMessage {
-        state: Some(session_state(session)),
+        kind: Some(server_message::Kind::State(session_state(session))),
+    };
+    let text = serde_json::to_string(&message).expect("ServerMessage always serializes");
+    for tx in session.sockets.values() {
+        let _ = tx.send(Message::Text(text.clone()));
+    }
+}
+
+/// Ephemeral — re-broadcast verbatim to every socket watching this
+/// session, sender included. Never touches `session.project`, never
+/// persisted, no undo/redo entry.
+pub fn broadcast_ping(session: &ProjectSession, ping: Ping) {
+    let message = ServerMessage {
+        kind: Some(server_message::Kind::Ping(ping)),
     };
     let text = serde_json::to_string(&message).expect("ServerMessage always serializes");
     for tx in session.sockets.values() {

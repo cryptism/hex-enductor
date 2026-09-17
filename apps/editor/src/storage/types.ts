@@ -19,6 +19,9 @@ export interface ProjectStorage {
   open(): Promise<OpenedProjectData>;
   subscribe(onUpdate: (data: OpenedProjectData) => void): () => void;
   execute(command: Command): void;
+  /** Purely ephemeral — never touches project state. A no-op on backends with no live session to broadcast over (local-fs). */
+  ping(locationId: string, x: number, y: number): void;
+  onPing(onPing: (ping: { locationId: string; x: number; y: number }) => void): () => void;
   undo(): void;
   redo(): void;
   getImageUrl(file: string): Promise<string>;

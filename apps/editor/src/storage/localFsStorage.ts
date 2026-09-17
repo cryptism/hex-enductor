@@ -143,6 +143,14 @@ export function createLocalFsStorage(dirHandle: FileSystemDirectoryHandle): Proj
       return () => listeners.delete(onUpdate);
     },
 
+    // No live session to broadcast a ping over — a no-op, not an
+    // error, so callers (the editor's Ping tool) don't need to know
+    // or care which backend is active.
+    ping() {},
+    onPing() {
+      return () => {};
+    },
+
     execute,
 
     async undo() {

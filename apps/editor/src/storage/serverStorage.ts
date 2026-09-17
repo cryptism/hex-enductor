@@ -1,4 +1,4 @@
-import { connectLiveSession, type LiveSession } from "@hex-enductor/live-session";
+import { connectLiveSession, type LiveSession, type PingEvent } from "@hex-enductor/live-session";
 import { serverUrl } from "../server.ts";
 import type { OpenedProjectData, ProjectStorage } from "./types.ts";
 
@@ -23,6 +23,7 @@ export function createServerStorage(path: string): ProjectStorage {
   // session to already exist (mirrors localFsStorage, which never
   // gates on anything either).
   const listeners = new Set<(data: OpenedProjectData) => void>();
+  const pingListeners = new Set<(ping: PingEvent) => void>();
 
   return {
     label: path,
@@ -32,6 +33,9 @@ export function createServerStorage(path: string): ProjectStorage {
       session.subscribe((data) => {
         for (const listener of listeners) listener(data);
       });
+      session.onPing((ping) => {
+        for (const listener of pingListeners) listener(ping);
+      });
       return session.initial;
     },
 
@@ -40,8 +44,17 @@ export function createServerStorage(path: string): ProjectStorage {
       return () => listeners.delete(onUpdate);
     },
 
+    onPing(onPing) {
+      pingListeners.add(onPing);
+      return () => pingListeners.delete(onPing);
+    },
+
     execute(command) {
       session?.execute(command);
+    },
+
+    ping(locationId, x, y) {
+      session?.ping(locationId, x, y);
     },
 
     undo() {

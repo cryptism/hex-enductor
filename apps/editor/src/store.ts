@@ -23,6 +23,11 @@ interface AppState {
   // The fog paint tool's armed state, same idea as placingLocation —
   // only meaningful with both editMode and gmMode on.
   paintingFog: boolean;
+  // The Ping tool's armed state — gmMode alone, not editMode, since a
+  // ping never touches project state. Unlike the other tools this one
+  // doesn't auto-disarm after a single use — more a laser-pointer mode
+  // you click on and off than a one-shot placement.
+  pinging: boolean;
   // A view toggle, not a safety gate — unlike editMode/gmMode this
   // carries across projects/locations rather than resetting, same as
   // flipping "show rulers" would.
@@ -41,6 +46,7 @@ interface AppState {
   setEditMode: (editMode: boolean) => void;
   setGmMode: (gmMode: boolean) => void;
   setPaintingFog: (paintingFog: boolean) => void;
+  setPinging: (pinging: boolean) => void;
   setGridVisible: (gridVisible: boolean) => void;
   setPlacingLocation: (placingLocation: boolean) => void;
 }
@@ -53,6 +59,7 @@ function reset(storage: ProjectStorage) {
     editMode: false,
     gmMode: false,
     paintingFog: false,
+    pinging: false,
     placingLocation: false,
   };
 }
@@ -64,6 +71,7 @@ export const useAppStore = create<AppState>((set) => ({
   editMode: false,
   gmMode: false,
   paintingFog: false,
+  pinging: false,
   gridVisible: true,
   placingLocation: false,
   openServerProject: (path) => {
@@ -73,11 +81,12 @@ export const useAppStore = create<AppState>((set) => ({
   setStorage: (storage) => set(reset(storage)),
   closeProject: () => set({ storage: null, currentLocationId: null, selectedLinkId: null }),
   setCurrentLocation: (id) =>
-    set({ currentLocationId: id, selectedLinkId: null, placingLocation: false, paintingFog: false }),
+    set({ currentLocationId: id, selectedLinkId: null, placingLocation: false, paintingFog: false, pinging: false }),
   selectLink: (id) => set({ selectedLinkId: id }),
   setEditMode: (editMode) => set({ editMode, selectedLinkId: null, placingLocation: false, paintingFog: false }),
-  setGmMode: (gmMode) => set({ gmMode, paintingFog: false }),
-  setPaintingFog: (paintingFog) => set({ paintingFog, selectedLinkId: null }),
+  setGmMode: (gmMode) => set({ gmMode, paintingFog: false, pinging: false }),
+  setPaintingFog: (paintingFog) => set({ paintingFog, selectedLinkId: null, pinging: false }),
+  setPinging: (pinging) => set({ pinging, selectedLinkId: null, placingLocation: false, paintingFog: false }),
   setGridVisible: (gridVisible) => set({ gridVisible }),
-  setPlacingLocation: (placingLocation) => set({ placingLocation, selectedLinkId: null }),
+  setPlacingLocation: (placingLocation) => set({ placingLocation, selectedLinkId: null, pinging: false }),
 }));

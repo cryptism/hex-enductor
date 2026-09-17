@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { MapCanvas, findLinkIcon } from "@hex-enductor/map-core";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { MapCanvas, findLinkIcon, PING_EFFECT_DURATION_MS } from "@hex-enductor/map-core";
 import { useAppStore } from "./store.ts";
 import { LinkForm } from "./LinkForm.tsx";
 import { LocationContentForm } from "./LocationContentForm.tsx";
@@ -33,6 +33,7 @@ function App() {
   const editMode = useAppStore((s) => s.editMode);
   const gmMode = useAppStore((s) => s.gmMode);
   const paintingFog = useAppStore((s) => s.paintingFog);
+  const pinging = useAppStore((s) => s.pinging);
   const gridVisible = useAppStore((s) => s.gridVisible);
   const placingLocation = useAppStore((s) => s.placingLocation);
   const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
@@ -40,6 +41,7 @@ function App() {
   const setEditMode = useAppStore((s) => s.setEditMode);
   const setGmMode = useAppStore((s) => s.setGmMode);
   const setPaintingFog = useAppStore((s) => s.setPaintingFog);
+  const setPinging = useAppStore((s) => s.setPinging);
   const setGridVisible = useAppStore((s) => s.setGridVisible);
   const setPlacingLocation = useAppStore((s) => s.setPlacingLocation);
 
@@ -51,6 +53,25 @@ function App() {
   useEffect(() => {
     if (gmMode) setFogLayerVisible(true);
   }, [gmMode]);
+
+  // Driven entirely by storage.onPing, never set optimistically on
+  // click — hexend rebroadcasts a ping to the sender too, so this is
+  // the one path that shows it, whether it's this window's own ping or
+  // another connected client's. Only shown while looking at the same
+  // location it targeted.
+  const [pingAt, setPingAt] = useState<{ x: number; y: number; key: number } | null>(null);
+  const pingKeyRef = useRef(0);
+  const pingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!storage) return;
+    return storage.onPing((ping) => {
+      if (ping.locationId !== currentLocationId) return;
+      if (pingTimeoutRef.current) clearTimeout(pingTimeoutRef.current);
+      pingKeyRef.current += 1;
+      setPingAt({ x: ping.x, y: ping.y, key: pingKeyRef.current });
+      pingTimeoutRef.current = setTimeout(() => setPingAt(null), PING_EFFECT_DURATION_MS);
+    });
+  }, [storage, currentLocationId]);
 
   // The active backend's data — no more react-query: every storage
   // method already hands back the freshly reopened project, so a
@@ -227,6 +248,16 @@ function App() {
             </label>
 
             {gmMode && currentLocation.image && (
+              <button
+                type="button"
+                className={`tool-button${pinging ? " active" : ""}`}
+                onClick={() => setPinging(!pinging)}
+              >
+                {pinging ? "Click the map to ping…" : "Ping"}
+              </button>
+            )}
+
+            {gmMode && currentLocation.image && (
               <FogControls
                 key={currentLocation.id}
                 image={currentLocation.image}
@@ -377,6 +408,9 @@ function App() {
                   onPaintFogCells={(cells, revealed) =>
                     storage.execute({ type: "setFogCells", locationId: currentLocation.id, cells, revealed })
                   }
+                  pinging={pinging}
+                  onPing={(point) => storage.ping(currentLocation.id, point.x, point.y)}
+                  pingAt={pingAt}
                 />
                 <label className="grid-toggle">
                   <input type="checkbox" checked={gridVisible} onChange={(e) => setGridVisible(e.target.checked)} />

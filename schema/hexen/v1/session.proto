@@ -11,11 +11,22 @@ message ClientMessage {
     Command command = 1;
     Undo undo = 2;
     Redo redo = 3;
+    Ping ping = 4;
   }
 }
 
 message Undo {}
 message Redo {}
+
+// Draws attention to a spot on a map — purely ephemeral, never applied
+// to the project or persisted. hexend just re-broadcasts it verbatim
+// to every socket watching this session (sender included), the same
+// as a state broadcast but without touching state at all.
+message Ping {
+  string location_id = 1;
+  double x = 2;
+  double y = 3;
+}
 
 // A location's resolved title/summary/body, regardless of whether it
 // came from inline content or an Obsidian vault file. Inline content
@@ -36,7 +47,11 @@ message OpenedProjectData {
   map<string, string> resolve_errors = 4;
 }
 
-// The one message type hexend ever sends over /ws.
+// What hexend sends over /ws — either the project's state (initial
+// handshake or after a command) or a re-broadcast Ping.
 message ServerMessage {
-  OpenedProjectData state = 1;
+  oneof kind {
+    OpenedProjectData state = 1;
+    Ping ping = 2;
+  }
 }

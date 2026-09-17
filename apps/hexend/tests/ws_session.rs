@@ -51,6 +51,39 @@ async fn round_trips_a_command_over_ws_and_persists_it() {
 }
 
 #[tokio::test]
+async fn rebroadcasts_a_ping_to_every_socket_without_touching_state() {
+    let port = start_server().await;
+
+    let tmp = tempfile_project().await;
+    let url = format!(
+        "ws://127.0.0.1:{port}/ws?path={}",
+        urlencoding_lite(tmp.to_str().unwrap())
+    );
+
+    let (mut a, _) = tokio_tungstenite::connect_async(&url).await.expect("connect a");
+    a.next().await.expect("a initial").expect("ok");
+    let (mut b, _) = tokio_tungstenite::connect_async(&url).await.expect("connect b");
+    b.next().await.expect("b initial").expect("ok");
+
+    let ping = serde_json::json!({
+        "ping": { "locationId": "town", "x": 12.5, "y": 34.5 }
+    });
+    a.send(Message::Text(ping.to_string())).await.expect("send ping");
+
+    for ws in [&mut a, &mut b] {
+        let msg = ws.next().await.expect("ping broadcast").expect("ok");
+        let Message::Text(text) = msg else { panic!("expected text") };
+        assert!(text.contains("\"ping\""), "{text}");
+        assert!(text.contains("town") && text.contains("12.5"), "{text}");
+    }
+
+    // Never touched the project — nothing should have been (re)written to disk.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let saved = tokio::fs::read_to_string(&tmp).await.unwrap();
+    assert!(!saved.contains("12.5"));
+}
+
+#[tokio::test]
 async fn adds_an_orphan_location_over_ws() {
     let port = start_server().await;
 

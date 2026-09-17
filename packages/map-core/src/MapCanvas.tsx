@@ -54,12 +54,77 @@ function FogNoiseDefs() {
 
 // Mounted only while the Add Location tool is active — has no
 // rendered output of its own, it just wires the map's native click
-// event to onPlace so the parent can turn it into a new pin.
+// event to onPlace so the parent can turn it into a new pin. The Ping
+// tool reuses this exact same mechanic — armed click-to-place — just
+// wired to a different callback.
 function ClickToPlace({ imageHeight, onPlace }: { imageHeight: number; onPlace: (point: Point) => void }) {
   useMapEvents({
     click: (e) => onPlace(latLngToPx(imageHeight, e.latlng)),
   });
   return null;
+}
+
+const PING_ANIMATION_NAME = "hexenductor-ping";
+let pingStyleInjected = false;
+
+// Injected once, globally — cheaper than redeclaring the @keyframes
+// inside every ping marker's own divIcon HTML (which would still work,
+// just duplicated on every ping).
+function ensurePingStyleInjected(): void {
+  if (pingStyleInjected) return;
+  pingStyleInjected = true;
+  const style = document.createElement("style");
+  style.textContent = `@keyframes ${PING_ANIMATION_NAME} { 0% { transform: scale(0.3); opacity: 1; } 100% { transform: scale(2.6); opacity: 0; } }`;
+  document.head.appendChild(style);
+}
+
+const PING_RING_COUNT = 3;
+const PING_RING_DELAY_S = 0.35;
+const PING_RING_DURATION_S = 1.3;
+const PING_RING_SIZE = 40;
+const PING_BOX_SIZE = 120; // must comfortably fit the largest ring at its final (2.6x) scale
+
+/** Total time the whole radiating effect takes, in ms — callers should clear `pingAt` no sooner than this, or the last ring cuts off mid-animation. */
+export const PING_EFFECT_DURATION_MS = ((PING_RING_COUNT - 1) * PING_RING_DELAY_S + PING_RING_DURATION_S) * 1000;
+
+function pingIcon() {
+  ensurePingStyleInjected();
+  const half = PING_RING_SIZE / 2;
+  const rings = Array.from({ length: PING_RING_COUNT }, (_, i) => {
+    const delay = i * PING_RING_DELAY_S;
+    return `<div style="
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: ${PING_RING_SIZE}px;
+      height: ${PING_RING_SIZE}px;
+      margin: -${half}px 0 0 -${half}px;
+      box-sizing: border-box;
+      border-radius: 50%;
+      border: 3px solid #c19a5f;
+      opacity: 0;
+      animation: ${PING_ANIMATION_NAME} ${PING_RING_DURATION_S}s ease-out ${delay}s forwards;
+    "></div>`;
+  }).join("");
+
+  return divIcon({
+    className: "",
+    html: `<div style="position: relative; width: ${PING_BOX_SIZE}px; height: ${PING_BOX_SIZE}px;">
+      <div style="
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 8px;
+        height: 8px;
+        margin: -4px 0 0 -4px;
+        border-radius: 50%;
+        background: #c19a5f;
+      "></div>
+      ${rings}
+    </div>`,
+    iconSize: [PING_BOX_SIZE, PING_BOX_SIZE],
+    iconAnchor: [PING_BOX_SIZE / 2, PING_BOX_SIZE / 2],
+  });
 }
 
 // How often a held-down paint stroke flushes its touched cells as one
@@ -165,6 +230,11 @@ export interface MapCanvasProps {
   /** While true (and fog is present), click-drag paints fog cells instead of panning the map. */
   fogEditable?: boolean;
   onPaintFogCells?: (cells: string[], revealed: boolean) => void;
+  /** The Ping tool: while true, clicking the map calls onPing instead of panning/selecting. */
+  pinging?: boolean;
+  onPing?: (point: Point) => void;
+  /** A transient "look here" highlight. Include a fresh `key` even for repeat pings at the same spot so the animation restarts — MapCanvas doesn't time this out on its own, the caller clears it. */
+  pingAt?: { x: number; y: number; key: number } | null;
 }
 
 const DEFAULT_MARKER_COLOR = "#c19a5f";
@@ -184,6 +254,9 @@ export function MapCanvas({
   fog = null,
   fogEditable = false,
   onPaintFogCells,
+  pinging = false,
+  onPing,
+  pingAt = null,
 }: MapCanvasProps) {
   const bounds: [[number, number], [number, number]] = [
     [0, 0],
@@ -235,7 +308,7 @@ export function MapCanvas({
     <MapContainer
       crs={CRS.Simple}
       bounds={bounds}
-      className={placing ? "placing" : fogEditable && fog ? "painting-fog" : undefined}
+      className={placing || pinging ? "placing" : fogEditable && fog ? "painting-fog" : undefined}
       style={{ width: "100%", height: "100%", background: "#12150f" }}
       zoomSnap={0.25}
       minZoom={-4}
@@ -243,6 +316,7 @@ export function MapCanvas({
       attributionControl={false}
     >
       {placing && onPlaceLocation && <ClickToPlace imageHeight={image.height} onPlace={onPlaceLocation} />}
+      {pinging && onPing && <ClickToPlace imageHeight={image.height} onPlace={onPing} />}
       {fogEditable && fog && onPaintFogCells && (
         <FogPaintHandler imageHeight={image.height} onPaint={onPaintFogCells} />
       )}
@@ -323,6 +397,8 @@ export function MapCanvas({
           }}
         />
       ))}
+
+      {pingAt && <Marker key={pingAt.key} position={pxToLatLng(image.height, pingAt)} icon={pingIcon()} interactive={false} />}
     </MapContainer>
   );
 }

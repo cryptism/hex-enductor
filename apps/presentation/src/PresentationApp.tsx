@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { MapCanvas, findLinkIcon } from "@hex-enductor/map-core";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MapCanvas, findLinkIcon, PING_EFFECT_DURATION_MS } from "@hex-enductor/map-core";
 import { connectLiveSession, type OpenedProjectData } from "@hex-enductor/live-session";
 
 function dirname(path: string): string {
@@ -29,18 +29,25 @@ function targetFromUrl(): Target | null {
 // fog of war included, with no separate "read-only mode" to keep in
 // sync elsewhere. Fog is applied/removed from the editor's own GM
 // mode (see apps/editor), not here — this window just shows the
-// result, same as it would any other command.
+// result, same as it would any other command. A Ping is the one
+// exception with a side effect here: receiving one for a different
+// location switches this window to it too, since drawing attention to
+// a spot only makes sense once everyone's looking at the same map.
 export function PresentationApp() {
   const target = useMemo(targetFromUrl, []);
   const [data, setData] = useState<OpenedProjectData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentLocationId, setCurrentLocationId] = useState<string | null>(null);
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
+  const [pingAt, setPingAt] = useState<{ x: number; y: number; key: number } | null>(null);
+  const pingKeyRef = useRef(0);
+  const pingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!target) return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
+    let unsubscribePing: (() => void) | undefined;
 
     connectLiveSession(target.server, target.path)
       .then((session) => {
@@ -50,12 +57,20 @@ export function PresentationApp() {
         }
         setData(session.initial);
         unsubscribe = session.subscribe(setData);
+        unsubscribePing = session.onPing((ping) => {
+          setCurrentLocationId(ping.locationId);
+          if (pingTimeoutRef.current) clearTimeout(pingTimeoutRef.current);
+          pingKeyRef.current += 1;
+          setPingAt({ x: ping.x, y: ping.y, key: pingKeyRef.current });
+          pingTimeoutRef.current = setTimeout(() => setPingAt(null), PING_EFFECT_DURATION_MS);
+        });
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
 
     return () => {
       cancelled = true;
       unsubscribe?.();
+      unsubscribePing?.();
     };
   }, [target]);
 
@@ -64,6 +79,22 @@ export function PresentationApp() {
   useEffect(() => {
     if (project && currentLocationId === null) setCurrentLocationId(project.defaultLocation);
   }, [project, currentLocationId]);
+
+  // A projector/second-monitor display is the whole point of this app
+  // — "f" toggles fullscreen without hunting for a browser chrome
+  // button, same key most video players use for the same reason.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key.toLowerCase() !== "f" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   if (!target) {
     return (
@@ -115,6 +146,7 @@ export function PresentationApp() {
             selectedLinkId={selectedLinkId ?? undefined}
             onSelectLink={goToLink}
             fog={currentLocation.fog}
+            pingAt={pingAt}
           />
         ) : (
           <div className="status">"{currentLocation.id}" has no image — nothing to render.</div>

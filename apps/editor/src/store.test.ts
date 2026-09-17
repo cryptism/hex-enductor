@@ -98,6 +98,48 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().paintingFog).toBe(true);
   });
 
+  test("starts with the Ping tool disarmed", () => {
+    expect(useAppStore.getState().pinging).toBe(false);
+  });
+
+  test("Ping only needs GM mode, not edit mode", () => {
+    useAppStore.getState().setEditMode(false);
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setPinging(true);
+
+    expect(useAppStore.getState().editMode).toBe(false);
+    expect(useAppStore.getState().pinging).toBe(true);
+  });
+
+  test("turning off GM mode disarms the Ping tool", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setPinging(true);
+    useAppStore.getState().setGmMode(false);
+
+    expect(useAppStore.getState().pinging).toBe(false);
+  });
+
+  test("arming the fog paint tool disarms the Ping tool, and vice versa", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setEditMode(true);
+    useAppStore.getState().setPinging(true);
+    useAppStore.getState().setPaintingFog(true);
+
+    expect(useAppStore.getState().pinging).toBe(false);
+
+    useAppStore.getState().setPinging(true);
+    expect(useAppStore.getState().paintingFog).toBe(false);
+  });
+
+  test("arming the Add Location tool disarms the Ping tool", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setEditMode(true);
+    useAppStore.getState().setPinging(true);
+    useAppStore.getState().setPlacingLocation(true);
+
+    expect(useAppStore.getState().pinging).toBe(false);
+  });
+
   test("grid is visible by default, and survives opening a different project", () => {
     expect(useAppStore.getState().gridVisible).toBe(true);
 

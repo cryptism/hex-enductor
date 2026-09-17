@@ -22,10 +22,11 @@ use tower_http::cors::CorsLayer;
 
 use crate::image_size::read_image_size;
 use crate::pathutil::{resolve, resolve_cwd};
-use crate::pb::hexen::v1::{client_message, ClientMessage, ServerMessage};
+use crate::pb::hexen::v1::{client_message, server_message, ClientMessage, ServerMessage};
 use crate::router::{create_project, list_directory};
 use crate::session::{
-    add_socket, apply_and_broadcast, get_or_create_session, redo, remove_socket, session_state, undo, Sessions,
+    add_socket, apply_and_broadcast, broadcast_ping, get_or_create_session, redo, remove_socket, session_state, undo,
+    Sessions,
 };
 
 #[derive(Clone)]
@@ -84,7 +85,7 @@ async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppSt
     let initial = {
         let guard = session.lock().await;
         ServerMessage {
-            state: Some(session_state(&guard)),
+            kind: Some(server_message::Kind::State(session_state(&guard))),
         }
     };
     let text = serde_json::to_string(&initial).expect("ServerMessage always serializes");
@@ -125,6 +126,7 @@ async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppSt
                 }
                 Some(client_message::Kind::Undo(_)) => undo(&mut guard),
                 Some(client_message::Kind::Redo(_)) => redo(&mut guard),
+                Some(client_message::Kind::Ping(ping)) => broadcast_ping(&guard, ping),
                 None => {}
             }
         }

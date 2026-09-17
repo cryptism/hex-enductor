@@ -29,9 +29,14 @@ beforeAll(() => {
         ws.send(JSON.stringify({ state: { project: MINIMAL_WIRE_PROJECT } }));
       },
       message(ws, message) {
+        const parsed = JSON.parse(String(message));
+        if (parsed.ping) {
+          ws.send(JSON.stringify({ ping: parsed.ping }));
+          return;
+        }
         ws.send(
           JSON.stringify({
-            state: { project: MINIMAL_WIRE_PROJECT, warnings: [JSON.stringify(JSON.parse(String(message)))] },
+            state: { project: MINIMAL_WIRE_PROJECT, warnings: [JSON.stringify(parsed)] },
           }),
         );
       },
@@ -72,6 +77,24 @@ describe("connectLiveSession", () => {
 
     unsubscribe();
     session.execute({ type: "saveGrid", locationId: "town", grid: null });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(received).toHaveLength(1); // unsubscribed — no second entry
+
+    session.close();
+  });
+
+  test("ping sends its own message shape and onPing receives the rebroadcast", async () => {
+    const session = await connectLiveSession(serverUrl(), "/some/project.hexen.yml");
+    const received: unknown[] = [];
+    const unsubscribe = session.onPing((ping) => received.push(ping));
+
+    session.ping("town", 12.5, 34.5);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(received).toEqual([{ locationId: "town", x: 12.5, y: 34.5 }]);
+
+    unsubscribe();
+    session.ping("town", 1, 1);
     await new Promise((r) => setTimeout(r, 20));
     expect(received).toHaveLength(1); // unsubscribed — no second entry
 
