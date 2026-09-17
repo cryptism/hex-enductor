@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package hexen.v1;
+
+import "hexen/v1/content.proto";
+import "hexen/v1/location.proto";
+
+message HexenProject {
+  int32 schema_version = 1;
+  string title = 2;
+  string default_location = 3;
+  ProjectContent content = 4;
+  repeated Location locations = 5;
+}

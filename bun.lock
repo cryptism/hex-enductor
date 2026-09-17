@@ -73,6 +73,7 @@
         "@hex-enductor/hexen-schema": "workspace:*",
         "@hex-enductor/live-session": "workspace:*",
         "@hex-enductor/map-core": "workspace:*",
+        "@hex-enductor/project-ops": "workspace:*",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
       },

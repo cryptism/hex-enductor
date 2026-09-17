@@ -1,11 +1,12 @@
 import { useMemo } from "react";
 import { CRS, divIcon } from "leaflet";
 import { MapContainer, ImageOverlay, Polygon, Marker, Popup, useMapEvents } from "react-leaflet";
-import type { Grid, ImageRef, Link, Point } from "@hex-enductor/hexen-schema";
+import type { FogOfWar, Grid, ImageRef, Link, Point } from "@hex-enductor/hexen-schema";
 import { loadHexBasis, buildHexPolygons } from "./hexMath.ts";
 import { buildSquarePolygons } from "./squareMath.ts";
 import { pxToLatLng, polygonToLatLngs, latLngToPx } from "./coords.ts";
 import { findLinkIcon } from "./linkIcons.ts";
+import { fogCellAt, fogCellCorners, hiddenFogCells } from "./fog.ts";
 import "leaflet/dist/leaflet.css";
 
 // Mounted only while the Add Location tool is active — has no
@@ -14,6 +15,17 @@ import "leaflet/dist/leaflet.css";
 function ClickToPlace({ imageHeight, onPlace }: { imageHeight: number; onPlace: (point: Point) => void }) {
   useMapEvents({
     click: (e) => onPlace(latLngToPx(imageHeight, e.latlng)),
+  });
+  return null;
+}
+
+// Mounted only in fog-editable mode — clicking anywhere on the map
+// (not on a marker, which intercepts its own click) toggles whichever
+// fog cell the click landed in. The fog polygons themselves are
+// non-interactive so clicks always reach here.
+function FogClickHandler({ imageHeight, onToggle }: { imageHeight: number; onToggle: (cell: string) => void }) {
+  useMapEvents({
+    click: (e) => onToggle(fogCellAt(latLngToPx(imageHeight, e.latlng))),
   });
   return null;
 }
@@ -35,6 +47,11 @@ export interface MapCanvasProps {
   onPlaceLocation?: (point: Point) => void;
   /** Presentation/wiki-embed mode — no interaction, just the rendered map. Not exercised anywhere yet. */
   readOnly?: boolean;
+  /** Null/absent means fog is off for this Location — nothing is drawn. */
+  fog?: FogOfWar | null;
+  /** While true (and fog is present), clicking the map toggles that fog cell instead of panning-only. */
+  fogEditable?: boolean;
+  onToggleFogCell?: (cell: string) => void;
 }
 
 const DEFAULT_MARKER_COLOR = "#c19a5f";
@@ -51,6 +68,9 @@ export function MapCanvas({
   placing = false,
   onPlaceLocation,
   readOnly = false,
+  fog = null,
+  fogEditable = false,
+  onToggleFogCell,
 }: MapCanvasProps) {
   const bounds: [[number, number], [number, number]] = [
     [0, 0],
@@ -66,6 +86,14 @@ export function MapCanvas({
     return buildSquarePolygons(grid, image.width, image.height);
   }, [grid, image.width, image.height]);
 
+  const fogCellPolygons = useMemo(() => {
+    if (!fog) return [];
+    return hiddenFogCells(image, fog.revealedCells).map((key) => {
+      const [col, row] = key.split(",").map(Number) as [number, number];
+      return fogCellCorners(col, row, image);
+    });
+  }, [fog, image.width, image.height]);
+
   return (
     <MapContainer
       crs={CRS.Simple}
@@ -78,6 +106,9 @@ export function MapCanvas({
       attributionControl={false}
     >
       {placing && onPlaceLocation && <ClickToPlace imageHeight={image.height} onPlace={onPlaceLocation} />}
+      {fogEditable && fog && onToggleFogCell && (
+        <FogClickHandler imageHeight={image.height} onToggle={onToggleFogCell} />
+      )}
       <ImageOverlay url={imageUrl} bounds={bounds} />
 
       {gridVisible && gridPolygons.map((corners, i) => (
@@ -141,6 +172,19 @@ export function MapCanvas({
             </Marker>
           );
         })}
+
+      {fogCellPolygons.map((corners, i) => (
+        <Polygon
+          key={i}
+          positions={polygonToLatLngs(image.height, corners)}
+          pathOptions={{
+            color: "transparent",
+            fillColor: "#0a0a08",
+            fillOpacity: 0.92,
+            interactive: false,
+          }}
+        />
+      ))}
     </MapContainer>
   );
 }

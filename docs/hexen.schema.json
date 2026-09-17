@@ -396,6 +396,32 @@
               "additionalProperties": false,
               "description": "A pin on a parent Location's map: position and display only, never a title or summary — those live on the target Location's own content. See parseHexenProject in ./index.ts for how a dangling target is handled."
             }
+          },
+          "fog": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "revealedCells": {
+                    "default": [],
+                    "description": "Opaque cell keys the GM has revealed, in whatever addressing scheme the client's fog overlay uses (see packages/map-core/src/fog.ts) — the server never interprets them.",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "revealedCells"
+                ],
+                "additionalProperties": false,
+                "description": "A Location's fog-of-war state. Presence (even with no revealed cells) means fog is on; absence means the map is fully visible."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -403,7 +429,8 @@
           "grid",
           "image",
           "content",
-          "links"
+          "links",
+          "fog"
         ],
         "additionalProperties": false,
         "description": "The one node type in the format. A Location becomes a map you can click into purely by having a grid, and a pin on someone else's map purely by being the target of a Link elsewhere — both, either, or neither can be true of the same Location at once."

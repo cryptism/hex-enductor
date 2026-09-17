@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package hexen.v1;
+
+// A pixel coordinate in the map image's own coordinate space.
+message Point {
+  double x = 1;
+  double y = 2;
+}
+
+// Visual styling for a grid overlay's lines.
+message GridStyle {
+  // CSS color for the grid lines.
+  string color = 1;
+  // Grid line stroke width, in pixels. Defaults to 1 when absent —
+  // proto3's implicit zero-value doesn't match that default, so this
+  // is `optional` (tracked presence) rather than a plain field. Apply
+  // the default explicitly wherever a GridStyle is constructed or read.
+  optional double weight = 2;
+  // Defaults to 0.45 when absent — same presence caveat as `weight`.
+  optional double opacity = 3;
+}
+
+// A hex lattice calibrated by an origin plus two basis vectors — see
+// packages/map-core/src/hexMath.ts for the math this feeds.
+message HexGrid {
+  // Pixel position of one hex's centre.
+  Point origin = 1;
+  // Vector from origin to one neighbouring hex's centre.
+  Point b1 = 2;
+  // Vector from origin to a second neighbouring hex's centre, not
+  // parallel to b1.
+  Point b2 = 3;
+  // Real-world distance one hex represents (e.g. km), for ruler
+  // readouts. Genuinely optional — absent means "no ruler".
+  optional double distance_per_cell = 4;
+  GridStyle style = 5;
+}
+
+// A square lattice.
+message SquareGrid {
+  // Pixel position of one cell's top-left corner.
+  Point origin = 1;
+  // Width and height of one grid cell, in pixels.
+  Point cell_size = 2;
+  optional double distance_per_cell = 3;
+  GridStyle style = 4;
+}
+
+// How a Location's own map surface is calibrated, if it has one.
+message Grid {
+  oneof kind {
+    HexGrid hex = 1;
+    SquareGrid square = 2;
+  }
+}

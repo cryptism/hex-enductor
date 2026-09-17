@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package hexen.v1;
+
+import "hexen/v1/command.proto";
+import "hexen/v1/project.proto";
+
+// What a connected client sends over hexend's /ws session.
+message ClientMessage {
+  oneof kind {
+    Command command = 1;
+    Undo undo = 2;
+    Redo redo = 3;
+  }
+}
+
+message Undo {}
+message Redo {}
+
+// A location's resolved title/summary/body, regardless of whether it
+// came from inline content or an Obsidian vault file. Inline content
+// never has a summary — only an Obsidian note's frontmatter can set one.
+message ResolvedContent {
+  string title = 1;
+  optional string summary = 2;
+  string body = 3;
+}
+
+// hexend's "state" broadcast — the same shape both the editor and the
+// presentation app render from, whether it's the initial handshake or
+// a broadcast after a command.
+message OpenedProjectData {
+  HexenProject project = 1;
+  repeated string warnings = 2;
+  map<string, ResolvedContent> resolved_content = 3;
+  map<string, string> resolve_errors = 4;
+}
+
+// The one message type hexend ever sends over /ws.
+message ServerMessage {
+  OpenedProjectData state = 1;
+}

@@ -25,7 +25,7 @@ describe("createProject", () => {
       title: "New Realm",
       defaultLocation: "town",
       content: { type: "inline" },
-      locations: [{ id: "town", grid: null, image: null, content: null, links: [] }],
+      locations: [{ id: "town", grid: null, image: null, content: null, links: [], fog: null }],
     });
     expect(result.warnings).toEqual([]);
   });

@@ -129,6 +129,7 @@ export function buildHexenProject(entries: VaultEntry[], opts: BuildOptions): Bu
       image,
       content: { type: "obsidian", ref: root.relativePath },
       links: [],
+      fog: null,
     });
     linksByMapId.set(mapId, []);
   }
@@ -145,6 +146,7 @@ export function buildHexenProject(entries: VaultEntry[], opts: BuildOptions): Bu
       image: null,
       content: { type: "obsidian", ref: pin.relativePath },
       links: [],
+      fog: null,
     });
 
     const links = linksByMapId.get(mapId);

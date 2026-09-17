@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package hexen.v1;
+
+import "hexen/v1/grid.proto";
+import "hexen/v1/location.proto";
+
+// A partial Link — only the fields present are meant to change.
+// Mirrors LinkSchema.partial() in packages/hexen-schema.
+message LinkPatch {
+  optional string id = 1;
+  optional string target = 2;
+  optional double x = 3;
+  optional double y = 4;
+  optional string type = 5;
+  optional string icon = 6;
+  optional string color = 7;
+  optional bool hidden = 8;
+}
+
+message SaveLinkCommand {
+  string location_id = 1;
+  string link_id = 2;
+  LinkPatch patch = 3;
+}
+
+// A partial inline LocationContent — only title/body, since a command
+// can't change a location's content *type*. Mirrors
+// InlineLocationContentSchema.omit({type: true}).partial().
+message InlineContentPatch {
+  optional string title = 1;
+  optional string body = 2;
+}
+
+message SaveLocationContentCommand {
+  string location_id = 1;
+  InlineContentPatch patch = 2;
+}
+
+// The pin's own marker type (settlement/ruin/landmark/...) is named
+// `link_type` here, not `type` — `type` is already this command's own
+// field name for reaching the Command oneof's discriminant.
+message AddLocationLinkCommand {
+  string parent_location_id = 1;
+  string target_location_id = 2;
+  double x = 3;
+  double y = 4;
+  string link_type = 5;
+}
+
+message SaveGridCommand {
+  string location_id = 1;
+  // Absent means "clear the grid" — mirrors GridSchema.nullable().
+  Grid grid = 2;
+}
+
+message SaveImageCommand {
+  string location_id = 1;
+  // Absent means "remove the image" — mirrors ImageRefSchema.nullable().
+  ImageRef image = 2;
+}
+
+// Absent fog means "turn fog off" — mirrors FogOfWarSchema.nullable().
+// Present with no revealed cells starts fog with everything hidden.
+message SetFogCommand {
+  string location_id = 1;
+  FogOfWar fog = 2;
+}
+
+// Flips one opaque cell key between revealed and hidden. Errors if the
+// location has no fog started yet — see SetFogCommand.
+message ToggleFogCellCommand {
+  string location_id = 1;
+  string cell = 2;
+}
+
+// Every interaction that mutates a HexenProject, as data — the same
+// shape whether it arrives over hexend's WS session or is applied
+// straight to an in-memory project by a local-fs storage backend.
+message Command {
+  oneof kind {
+    SaveLinkCommand save_link = 1;
+    SaveLocationContentCommand save_location_content = 2;
+    AddLocationLinkCommand add_location_link = 3;
+    SaveGridCommand save_grid = 4;
+    SaveImageCommand save_image = 5;
+    SetFogCommand set_fog = 6;
+    ToggleFogCellCommand toggle_fog_cell = 7;
+  }
+}

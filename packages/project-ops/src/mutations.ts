@@ -1,4 +1,4 @@
-import type { Grid, HexenProject, ImageRef, Link, Location, ProjectContent } from "@hex-enductor/hexen-schema";
+import type { FogOfWar, Grid, HexenProject, ImageRef, Link, Location, ProjectContent } from "@hex-enductor/hexen-schema";
 
 /**
  * Pure, transport-agnostic operations on an in-memory HexenProject —
@@ -17,7 +17,7 @@ export function createMinimalProject(
     title,
     defaultLocation: defaultLocationId,
     content,
-    locations: [{ id: defaultLocationId, grid: null, image: null, content: null, links: [] }],
+    locations: [{ id: defaultLocationId, grid: null, image: null, content: null, links: [], fog: null }],
   };
 }
 
@@ -78,7 +78,7 @@ export function addLocationLink(
   // the same operation, adding a Link, so only create the Location
   // itself when it doesn't already exist.
   if (!project.locations.some((l) => l.id === targetLocationId)) {
-    project.locations.push({ id: targetLocationId, grid: null, image: null, content: null, links: [] });
+    project.locations.push({ id: targetLocationId, grid: null, image: null, content: null, links: [], fog: null });
   }
 
   // A Link's own id is independent of its target on purpose — a
@@ -98,5 +98,26 @@ export function saveGrid(project: HexenProject, locationId: string, grid: Grid |
 export function saveImage(project: HexenProject, locationId: string, image: ImageRef | null): HexenProject {
   const location = findLocation(project, locationId);
   location.image = image;
+  return project;
+}
+
+export function setFog(project: HexenProject, locationId: string, fog: FogOfWar | null): HexenProject {
+  const location = findLocation(project, locationId);
+  location.fog = fog;
+  return project;
+}
+
+export function toggleFogCell(project: HexenProject, locationId: string, cell: string): HexenProject {
+  const location = findLocation(project, locationId);
+  if (!location.fog) {
+    throw new Error(`Location "${locationId}" has no fog of war — start it before toggling a cell`);
+  }
+  const revealed = new Set(location.fog.revealedCells);
+  if (revealed.has(cell)) {
+    revealed.delete(cell);
+  } else {
+    revealed.add(cell);
+  }
+  location.fog = { revealedCells: [...revealed] };
   return project;
 }

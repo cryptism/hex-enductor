@@ -1,0 +1,22 @@
+{
+  "name": "@hex-enductor/live-session",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hex-enductor/content-resolver": "workspace:*",
+    "@hex-enductor/hexen-schema": "workspace:*",
+    "@hex-enductor/project-ops": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "typescript": "^5.7.2"
+  }
+}

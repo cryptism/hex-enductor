@@ -7,6 +7,8 @@ import {
   addLocationLink,
   saveGrid,
   saveImage,
+  setFog,
+  toggleFogCell,
 } from "./mutations.ts";
 
 function fixture(): HexenProject {
@@ -22,9 +24,10 @@ function fixture(): HexenProject {
         image: null,
         content: { type: "inline", title: "The Town", body: "" },
         links: [{ id: "front-door", target: "inn", x: 1, y: 1, type: "settlement", color: null, hidden: false }],
+        fog: null,
       },
-      { id: "inn", grid: null, image: null, content: null, links: [] },
-      { id: "well", grid: null, image: null, content: null, links: [] },
+      { id: "inn", grid: null, image: null, content: null, links: [], fog: null },
+      { id: "well", grid: null, image: null, content: null, links: [], fog: null },
     ],
   };
 }
@@ -36,7 +39,7 @@ describe("createMinimalProject", () => {
       title: "New Realm",
       defaultLocation: "town",
       content: { type: "inline" },
-      locations: [{ id: "town", grid: null, image: null, content: null, links: [] }],
+      locations: [{ id: "town", grid: null, image: null, content: null, links: [], fog: null }],
     });
   });
 });
@@ -94,6 +97,7 @@ describe("addLocationLink", () => {
       image: null,
       content: null,
       links: [],
+      fog: null,
     });
   });
 
@@ -106,6 +110,7 @@ describe("addLocationLink", () => {
       image: null,
       content: null,
       links: [],
+      fog: null,
     });
   });
 
@@ -150,5 +155,35 @@ describe("saveImage", () => {
 
   test("throws on an unknown location", () => {
     expect(() => saveImage(fixture(), "nowhere", null)).toThrow(/No location "nowhere"/);
+  });
+});
+
+describe("setFog", () => {
+  test("starts fog with nothing revealed", () => {
+    expect(setFog(fixture(), "town", { revealedCells: [] }).locations[0]!.fog).toEqual({ revealedCells: [] });
+  });
+
+  test("clears fog", () => {
+    const project = setFog(fixture(), "town", { revealedCells: ["0,0"] });
+    expect(setFog(project, "town", null).locations[0]!.fog).toBeNull();
+  });
+});
+
+describe("toggleFogCell", () => {
+  test("reveals then re-hides a cell", () => {
+    const started = setFog(fixture(), "town", { revealedCells: [] });
+    const revealed = toggleFogCell(started, "town", "2,3");
+    expect(revealed.locations[0]!.fog).toEqual({ revealedCells: ["2,3"] });
+
+    const hidden = toggleFogCell(revealed, "town", "2,3");
+    expect(hidden.locations[0]!.fog).toEqual({ revealedCells: [] });
+  });
+
+  test("throws when the location has no fog started", () => {
+    expect(() => toggleFogCell(fixture(), "town", "2,3")).toThrow(/no fog of war/);
+  });
+
+  test("throws on an unknown location", () => {
+    expect(() => toggleFogCell(fixture(), "nowhere", "2,3")).toThrow(/No location "nowhere"/);
   });
 });

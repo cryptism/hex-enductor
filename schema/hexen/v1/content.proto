@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package hexen.v1;
+
+// A project's content source: an Obsidian vault.
+message ObsidianProjectContent {
+  // Path to the Obsidian vault, resolved relative to the .hexen.yml
+  // file's own directory.
+  string vault_root = 1;
+}
+
+// A project's content source: no external vault — each Location
+// carries its own title/body directly in this file.
+message InlineProjectContent {}
+
+// Where a project's location content (title/summary/body) is
+// resolved from.
+message ProjectContent {
+  oneof kind {
+    ObsidianProjectContent obsidian = 1;
+    InlineProjectContent inline = 2;
+  }
+}
+
+// A single location's content: one file in the project's Obsidian
+// vault.
+message ObsidianLocationContent {
+  // Path to the markdown file, relative to the project's
+  // content.vault_root.
+  string ref = 1;
+}
+
+// A single location's content, written directly into the .hexen.yml
+// — no vault file.
+message InlineLocationContent {
+  string title = 1;
+  // Defaults to "" when absent.
+  optional string body = 2;
+}
+
+// A Location's title/summary/body always come from here, resolved at
+// load time — never duplicated elsewhere. Inline content is the one
+// exception to "never duplicated into .hexen.yml": there is nowhere
+// else for it to live.
+message LocationContent {
+  oneof kind {
+    ObsidianLocationContent obsidian = 1;
+    InlineLocationContent inline = 2;
+  }
+}

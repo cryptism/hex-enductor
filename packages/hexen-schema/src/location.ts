@@ -35,6 +35,20 @@ export const LinkSchema = z
   );
 export type Link = z.infer<typeof LinkSchema>;
 
+export const FogOfWarSchema = z
+  .object({
+    revealedCells: z
+      .array(z.string())
+      .default([])
+      .describe(
+        "Opaque cell keys the GM has revealed, in whatever addressing scheme the client's fog overlay uses (see packages/map-core/src/fog.ts) — the server never interprets them.",
+      ),
+  })
+  .describe(
+    "A Location's fog-of-war state. Presence (even with no revealed cells) means fog is on; absence means the map is fully visible.",
+  );
+export type FogOfWar = z.infer<typeof FogOfWarSchema>;
+
 export const LocationSchema = z
   .object({
     id: z.string(),
@@ -42,6 +56,7 @@ export const LocationSchema = z
     image: ImageRefSchema.nullable().default(null),
     content: LocationContentSchema.nullable().default(null),
     links: z.array(LinkSchema).default([]),
+    fog: FogOfWarSchema.nullable().default(null),
   })
   .describe(
     "The one node type in the format. A Location becomes a map you can click into purely by having a grid, and a pin on someone else's map purely by being the target of a Link elsewhere — both, either, or neither can be true of the same Location at once.",
