@@ -1,13 +1,56 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CRS, divIcon } from "leaflet";
-import { MapContainer, ImageOverlay, Polygon, Marker, Popup, useMapEvents } from "react-leaflet";
+import { MapContainer, ImageOverlay, Polygon, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import type { FogOfWar, Grid, ImageRef, Link, Point } from "@hex-enductor/hexen-schema";
 import { loadHexBasis, buildHexPolygons } from "./hexMath.ts";
 import { buildSquarePolygons } from "./squareMath.ts";
 import { pxToLatLng, polygonToLatLngs, latLngToPx } from "./coords.ts";
 import { findLinkIcon } from "./linkIcons.ts";
 import { fogCellAt, fogCellCorners, hiddenFogCells } from "./fog.ts";
+import { fogNoiseTextureDataUrl, FOG_TEXTURE_SIZE } from "./fogTexture.ts";
 import "leaflet/dist/leaflet.css";
+
+const FOG_PATTERN_ID = "hexenductor-fog-noise";
+
+// Leaflet's default (SVG) renderer draws Polygons as <path> elements
+// inside one <svg> per map, but gives no way to add arbitrary <defs>
+// through react-leaflet's own API — so this reaches into that <svg>
+// directly and injects a <pattern> once, referenced by the fog
+// polygons below as `fill="url(#hexenductor-fog-noise)"`.
+// patternUnits="userSpaceOnUse" ties the tile to map coordinates (not
+// screen pixels), so it pans and zooms with the map like anything else
+// drawn on it, instead of looking pasted onto the viewport.
+function FogNoiseDefs() {
+  const map = useMap();
+  useEffect(() => {
+    const svg = map.getPane("overlayPane")?.querySelector("svg");
+    if (!svg || svg.querySelector(`#${FOG_PATTERN_ID}`)) return;
+
+    const ns = "http://www.w3.org/2000/svg";
+    let defs = svg.querySelector("defs");
+    if (!defs) {
+      defs = document.createElementNS(ns, "defs");
+      svg.insertBefore(defs, svg.firstChild);
+    }
+
+    const pattern = document.createElementNS(ns, "pattern");
+    pattern.setAttribute("id", FOG_PATTERN_ID);
+    pattern.setAttribute("patternUnits", "userSpaceOnUse");
+    pattern.setAttribute("width", String(FOG_TEXTURE_SIZE));
+    pattern.setAttribute("height", String(FOG_TEXTURE_SIZE));
+
+    const image = document.createElementNS(ns, "image");
+    image.setAttribute("href", fogNoiseTextureDataUrl());
+    image.setAttribute("width", String(FOG_TEXTURE_SIZE));
+    image.setAttribute("height", String(FOG_TEXTURE_SIZE));
+    pattern.appendChild(image);
+    defs.appendChild(pattern);
+
+    return () => pattern.remove();
+  }, [map]);
+
+  return null;
+}
 
 // Mounted only while the Add Location tool is active — has no
 // rendered output of its own, it just wires the map's native click
@@ -203,6 +246,7 @@ export function MapCanvas({
       {fogEditable && fog && onPaintFogCells && (
         <FogPaintHandler imageHeight={image.height} onPaint={onPaintFogCells} />
       )}
+      {fogCellPolygons.length > 0 && <FogNoiseDefs />}
       <ImageOverlay url={imageUrl} bounds={bounds} />
 
       {gridVisible && gridPolygons.map((corners, i) => (
@@ -273,7 +317,7 @@ export function MapCanvas({
           positions={polygonToLatLngs(image.height, corners)}
           pathOptions={{
             color: "transparent",
-            fillColor: "#0a0a08",
+            fillColor: `url(#${FOG_PATTERN_ID})`,
             fillOpacity: shiftHeld ? FOG_OPACITY_ERASING : FOG_OPACITY,
             interactive: false,
           }}
