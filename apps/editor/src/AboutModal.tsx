@@ -50,7 +50,7 @@ const HEX_LYRICS: { text: string; url: string }[] = [
 ];
 
 function pickHexLyric() {
-  return HEX_LYRICS[Math.floor(Math.random() * HEX_LYRICS.length)];
+  return HEX_LYRICS[Math.floor(Math.random() * HEX_LYRICS.length)]!;
 }
 
 export function AboutModal({ onClose }: { onClose: () => void }) {
