@@ -140,6 +140,47 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().pinging).toBe(false);
   });
 
+  test("starts with Follow mode off", () => {
+    expect(useAppStore.getState().followMode).toBe(false);
+  });
+
+  test("Follow mode only needs GM mode, not edit mode", () => {
+    useAppStore.getState().setEditMode(false);
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setFollowMode(true);
+
+    expect(useAppStore.getState().editMode).toBe(false);
+    expect(useAppStore.getState().followMode).toBe(true);
+  });
+
+  test("turning off GM mode disables Follow mode", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setFollowMode(true);
+    useAppStore.getState().setGmMode(false);
+
+    expect(useAppStore.getState().followMode).toBe(false);
+  });
+
+  test("switching location does not disable Follow mode — it stays on until switched off", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setFollowMode(true);
+    useAppStore.getState().setCurrentLocation("inn");
+
+    expect(useAppStore.getState().followMode).toBe(true);
+  });
+
+  test("Follow mode doesn't disarm or get disarmed by the Ping/paint-fog tools", () => {
+    useAppStore.getState().setGmMode(true);
+    useAppStore.getState().setEditMode(true);
+    useAppStore.getState().setFollowMode(true);
+    useAppStore.getState().setPinging(true);
+
+    expect(useAppStore.getState().followMode).toBe(true);
+
+    useAppStore.getState().setPaintingFog(true);
+    expect(useAppStore.getState().followMode).toBe(true);
+  });
+
   test("grid is visible by default, and survives opening a different project", () => {
     expect(useAppStore.getState().gridVisible).toBe(true);
 

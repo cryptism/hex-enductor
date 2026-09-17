@@ -28,6 +28,13 @@ interface AppState {
   // doesn't auto-disarm after a single use — more a laser-pointer mode
   // you click on and off than a one-shot placement.
   pinging: boolean;
+  // Another gmMode-alone sub-mode: while on, every pan/zoom on this
+  // window's own map broadcasts as a followView, and the presentation
+  // view drives its own map to match. Doesn't hijack clicks like the
+  // other tools (panning/zooming already just works), so it survives
+  // switching location — "until switched off" per its own name, not
+  // reset by navigation the way the click-tools are.
+  followMode: boolean;
   // A view toggle, not a safety gate — unlike editMode/gmMode this
   // carries across projects/locations rather than resetting, same as
   // flipping "show rulers" would.
@@ -47,6 +54,7 @@ interface AppState {
   setGmMode: (gmMode: boolean) => void;
   setPaintingFog: (paintingFog: boolean) => void;
   setPinging: (pinging: boolean) => void;
+  setFollowMode: (followMode: boolean) => void;
   setGridVisible: (gridVisible: boolean) => void;
   setPlacingLocation: (placingLocation: boolean) => void;
 }
@@ -60,6 +68,7 @@ function reset(storage: ProjectStorage) {
     gmMode: false,
     paintingFog: false,
     pinging: false,
+    followMode: false,
     placingLocation: false,
   };
 }
@@ -72,6 +81,7 @@ export const useAppStore = create<AppState>((set) => ({
   gmMode: false,
   paintingFog: false,
   pinging: false,
+  followMode: false,
   gridVisible: true,
   placingLocation: false,
   openServerProject: (path) => {
@@ -84,9 +94,10 @@ export const useAppStore = create<AppState>((set) => ({
     set({ currentLocationId: id, selectedLinkId: null, placingLocation: false, paintingFog: false, pinging: false }),
   selectLink: (id) => set({ selectedLinkId: id }),
   setEditMode: (editMode) => set({ editMode, selectedLinkId: null, placingLocation: false, paintingFog: false }),
-  setGmMode: (gmMode) => set({ gmMode, paintingFog: false, pinging: false }),
+  setGmMode: (gmMode) => set({ gmMode, paintingFog: false, pinging: false, followMode: false }),
   setPaintingFog: (paintingFog) => set({ paintingFog, selectedLinkId: null, pinging: false }),
   setPinging: (pinging) => set({ pinging, selectedLinkId: null, placingLocation: false, paintingFog: false }),
+  setFollowMode: (followMode) => set({ followMode }),
   setGridVisible: (gridVisible) => set({ gridVisible }),
   setPlacingLocation: (placingLocation) => set({ placingLocation, selectedLinkId: null, pinging: false }),
 }));

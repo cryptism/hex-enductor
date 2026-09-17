@@ -1,4 +1,4 @@
-import { connectLiveSession, type LiveSession, type PingEvent } from "@hex-enductor/live-session";
+import { connectLiveSession, type LiveSession, type PingEvent, type FollowViewEvent } from "@hex-enductor/live-session";
 import { serverUrl } from "../server.ts";
 import type { OpenedProjectData, ProjectStorage } from "./types.ts";
 
@@ -24,6 +24,7 @@ export function createServerStorage(path: string): ProjectStorage {
   // gates on anything either).
   const listeners = new Set<(data: OpenedProjectData) => void>();
   const pingListeners = new Set<(ping: PingEvent) => void>();
+  const followViewListeners = new Set<(view: FollowViewEvent) => void>();
 
   return {
     label: path,
@@ -35,6 +36,9 @@ export function createServerStorage(path: string): ProjectStorage {
       });
       session.onPing((ping) => {
         for (const listener of pingListeners) listener(ping);
+      });
+      session.onFollowView((view) => {
+        for (const listener of followViewListeners) listener(view);
       });
       return session.initial;
     },
@@ -49,12 +53,21 @@ export function createServerStorage(path: string): ProjectStorage {
       return () => pingListeners.delete(onPing);
     },
 
+    onFollowView(onFollowView) {
+      followViewListeners.add(onFollowView);
+      return () => followViewListeners.delete(onFollowView);
+    },
+
     execute(command) {
       session?.execute(command);
     },
 
     ping(locationId, x, y) {
       session?.ping(locationId, x, y);
+    },
+
+    followView(locationId, x, y, zoom) {
+      session?.followView(locationId, x, y, zoom);
     },
 
     undo() {

@@ -41,6 +41,54 @@ body {
   color: #e08a7a;
 }
 
+.status.landing {
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.recent-targets {
+  text-align: left;
+  width: min(32rem, 90vw);
+}
+
+.recent-targets h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.recent-targets ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.recent-targets a {
+  display: block;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.recent-targets a:hover {
+  border-color: var(--accent);
+}
+
+.recent-target-server {
+  color: var(--dim);
+  font-size: 0.85em;
+}
+
 .presentation {
   display: grid;
   grid-template-rows: auto 1fr auto;

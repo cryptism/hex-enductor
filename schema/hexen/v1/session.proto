@@ -12,6 +12,7 @@ message ClientMessage {
     Undo undo = 2;
     Redo redo = 3;
     Ping ping = 4;
+    FollowView follow_view = 5;
   }
 }
 
@@ -26,6 +27,16 @@ message Ping {
   string location_id = 1;
   double x = 2;
   double y = 3;
+}
+
+// The GM's own map view (pan + zoom), sent on every moveend/zoomend
+// while Follow mode is on. Just as ephemeral as Ping — never applied
+// to the project or persisted, hexend only ever re-broadcasts it.
+message FollowView {
+  string location_id = 1;
+  double x = 2;
+  double y = 3;
+  double zoom = 4;
 }
 
 // A location's resolved title/summary/body, regardless of whether it
@@ -48,10 +59,12 @@ message OpenedProjectData {
 }
 
 // What hexend sends over /ws — either the project's state (initial
-// handshake or after a command) or a re-broadcast Ping.
+// handshake or after a command), a re-broadcast Ping, or a
+// re-broadcast FollowView.
 message ServerMessage {
   oneof kind {
     OpenedProjectData state = 1;
     Ping ping = 2;
+    FollowView follow_view = 3;
   }
 }

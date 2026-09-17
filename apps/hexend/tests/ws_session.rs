@@ -84,6 +84,38 @@ async fn rebroadcasts_a_ping_to_every_socket_without_touching_state() {
 }
 
 #[tokio::test]
+async fn rebroadcasts_a_follow_view_to_every_socket_without_touching_state() {
+    let port = start_server().await;
+
+    let tmp = tempfile_project().await;
+    let url = format!(
+        "ws://127.0.0.1:{port}/ws?path={}",
+        urlencoding_lite(tmp.to_str().unwrap())
+    );
+
+    let (mut a, _) = tokio_tungstenite::connect_async(&url).await.expect("connect a");
+    a.next().await.expect("a initial").expect("ok");
+    let (mut b, _) = tokio_tungstenite::connect_async(&url).await.expect("connect b");
+    b.next().await.expect("b initial").expect("ok");
+
+    let view = serde_json::json!({
+        "followView": { "locationId": "town", "x": 100.0, "y": 200.0, "zoom": 1.5 }
+    });
+    a.send(Message::Text(view.to_string())).await.expect("send followView");
+
+    for ws in [&mut a, &mut b] {
+        let msg = ws.next().await.expect("followView broadcast").expect("ok");
+        let Message::Text(text) = msg else { panic!("expected text") };
+        assert!(text.contains("\"followView\""), "{text}");
+        assert!(text.contains("town") && text.contains("1.5"), "{text}");
+    }
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let saved = tokio::fs::read_to_string(&tmp).await.unwrap();
+    assert!(!saved.contains("1.5"));
+}
+
+#[tokio::test]
 async fn adds_an_orphan_location_over_ws() {
     let port = start_server().await;
 

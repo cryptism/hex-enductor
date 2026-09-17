@@ -5,7 +5,7 @@ import { LinkForm } from "./LinkForm.tsx";
 import { LocationContentForm } from "./LocationContentForm.tsx";
 import { AddLocationForm } from "./AddLocationForm.tsx";
 import { ConfigureGridForm } from "./ConfigureGridForm.tsx";
-import { FogControls } from "./FogControls.tsx";
+import { FogControls, FogStatusLine } from "./FogControls.tsx";
 import { ImageUpload } from "./ImageUpload.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { LocationBrowser } from "./LocationBrowser.tsx";
@@ -28,12 +28,14 @@ function OpenProjectForm() {
 
 function App() {
   const storage = useAppStore((s) => s.storage);
+  const openServerProject = useAppStore((s) => s.openServerProject);
   const currentLocationId = useAppStore((s) => s.currentLocationId);
   const selectedLinkId = useAppStore((s) => s.selectedLinkId);
   const editMode = useAppStore((s) => s.editMode);
   const gmMode = useAppStore((s) => s.gmMode);
   const paintingFog = useAppStore((s) => s.paintingFog);
   const pinging = useAppStore((s) => s.pinging);
+  const followMode = useAppStore((s) => s.followMode);
   const gridVisible = useAppStore((s) => s.gridVisible);
   const placingLocation = useAppStore((s) => s.placingLocation);
   const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
@@ -42,6 +44,7 @@ function App() {
   const setGmMode = useAppStore((s) => s.setGmMode);
   const setPaintingFog = useAppStore((s) => s.setPaintingFog);
   const setPinging = useAppStore((s) => s.setPinging);
+  const setFollowMode = useAppStore((s) => s.setFollowMode);
   const setGridVisible = useAppStore((s) => s.setGridVisible);
   const setPlacingLocation = useAppStore((s) => s.setPlacingLocation);
 
@@ -193,6 +196,21 @@ function App() {
     };
   }, [storage, currentLocationImageFile]);
 
+  // "?path=..." (optionally with "?server=...", see server.ts) opens a
+  // server project straight from a URL — a launch script's own tab,
+  // rather than the ProjectPicker's manual paste-a-path form. Only
+  // fires once, on first mount with nothing open yet; never re-fires
+  // on a later back/forward nav or a deliberate closeProject().
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedRef.current || storage !== null) return;
+    const path = new URLSearchParams(window.location.search).get("path");
+    if (!path) return;
+    autoOpenedRef.current = true;
+    openServerProject(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storage]);
+
   if (storage === null) return <OpenProjectForm />;
   if (loadError) return <div className="status error">{loadError}</div>;
 
@@ -231,6 +249,9 @@ function App() {
                 {project.title}
               </button>
             </div>
+
+            {gmMode && currentLocation.image && <FogStatusLine image={currentLocation.image} fog={currentLocation.fog} />}
+
             <button type="button" className="link-button sidebar-spaced" onClick={() => setBrowserOpen(true)}>
               Browse all locations…
             </button>
@@ -238,7 +259,7 @@ function App() {
             <label className="mode-toggle">
               <input type="checkbox" checked={editMode} onChange={(e) => setEditMode(e.target.checked)} />
               <span className="mode-toggle-track" aria-hidden="true" />
-              <span className="mode-toggle-label">{editMode ? "Editing" : "Viewing"}</span>
+              <span className="mode-toggle-label">Edit mode{editMode ? " on" : " off"}</span>
             </label>
 
             <label className="mode-toggle">
@@ -246,6 +267,14 @@ function App() {
               <span className="mode-toggle-track" aria-hidden="true" />
               <span className="mode-toggle-label">GM mode{gmMode ? " on" : " off"}</span>
             </label>
+
+            {gmMode && (
+              <label className="mode-toggle sub-mode">
+                <input type="checkbox" checked={followMode} onChange={(e) => setFollowMode(e.target.checked)} />
+                <span className="mode-toggle-track" aria-hidden="true" />
+                <span className="mode-toggle-label">Follow mode{followMode ? " on" : " off"}</span>
+              </label>
+            )}
 
             {gmMode && currentLocation.image && (
               <button
@@ -411,6 +440,11 @@ function App() {
                   pinging={pinging}
                   onPing={(point) => storage.ping(currentLocation.id, point.x, point.y)}
                   pingAt={pingAt}
+                  onViewChange={
+                    followMode
+                      ? (view) => storage.followView(currentLocation.id, view.x, view.y, view.zoom)
+                      : undefined
+                  }
                 />
                 <label className="grid-toggle">
                   <input type="checkbox" checked={gridVisible} onChange={(e) => setGridVisible(e.target.checked)} />

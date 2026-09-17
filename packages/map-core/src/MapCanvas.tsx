@@ -1,130 +1,79 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CRS, divIcon } from "leaflet";
-import { MapContainer, ImageOverlay, Polygon, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import Konva from "konva";
+import { Stage, Layer, Image as KonvaImage, Line, Circle, Group, Shape } from "react-konva";
+import useImage from "use-image";
 import type { FogOfWar, Grid, ImageRef, Link, Point } from "@hex-enductor/hexen-schema";
 import { loadHexBasis, buildHexPolygons } from "./hexMath.ts";
 import { buildSquarePolygons } from "./squareMath.ts";
-import { pxToLatLng, polygonToLatLngs, latLngToPx } from "./coords.ts";
 import { findLinkIcon } from "./linkIcons.ts";
-import { fogCellAt, fogCellCorners, hiddenFogCells } from "./fog.ts";
-import { fogNoiseTextureDataUrl, FOG_TEXTURE_SIZE } from "./fogTexture.ts";
-import "leaflet/dist/leaflet.css";
+import { FOG_CELL_SIZE, fogCellAt, hiddenFogCells } from "./fog.ts";
+import { fogNoiseTextureDataUrl } from "./fogTexture.ts";
 
-const FOG_PATTERN_ID = "hexenductor-fog-noise";
+// Everything here works in the image's own pixel space (x right, y
+// down) — the same space hexMath/squareMath/fog already use. A Konva
+// Stage's own x/y/scale transform is what turns that into screen
+// pixels; nothing downstream needs to know about it, unlike Leaflet's
+// CRS.Simple + lat/lng round-trip this replaced (see git history
+// around 2026-09-17 for that version, in packages/map-core/src/coords.ts).
 
-// Leaflet's default (SVG) renderer draws Polygons as <path> elements
-// inside one <svg> per map, but gives no way to add arbitrary <defs>
-// through react-leaflet's own API — so this reaches into that <svg>
-// directly and injects a <pattern> once, referenced by the fog
-// polygons below as `fill="url(#hexenductor-fog-noise)"`.
-// patternUnits="userSpaceOnUse" ties the tile to map coordinates (not
-// screen pixels), so it pans and zooms with the map like anything else
-// drawn on it, instead of looking pasted onto the viewport.
-function FogNoiseDefs() {
-  const map = useMap();
-  useEffect(() => {
-    const svg = map.getPane("overlayPane")?.querySelector("svg");
-    if (!svg || svg.querySelector(`#${FOG_PATTERN_ID}`)) return;
+const MIN_SCALE = 2 ** -4;
+const MAX_SCALE = 2 ** 3;
 
-    const ns = "http://www.w3.org/2000/svg";
-    let defs = svg.querySelector("defs");
-    if (!defs) {
-      defs = document.createElementNS(ns, "defs");
-      svg.insertBefore(defs, svg.firstChild);
-    }
-
-    const pattern = document.createElementNS(ns, "pattern");
-    pattern.setAttribute("id", FOG_PATTERN_ID);
-    pattern.setAttribute("patternUnits", "userSpaceOnUse");
-    pattern.setAttribute("width", String(FOG_TEXTURE_SIZE));
-    pattern.setAttribute("height", String(FOG_TEXTURE_SIZE));
-
-    const image = document.createElementNS(ns, "image");
-    image.setAttribute("href", fogNoiseTextureDataUrl());
-    image.setAttribute("width", String(FOG_TEXTURE_SIZE));
-    image.setAttribute("height", String(FOG_TEXTURE_SIZE));
-    pattern.appendChild(image);
-    defs.appendChild(pattern);
-
-    return () => pattern.remove();
-  }, [map]);
-
-  return null;
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
-// Mounted only while the Add Location tool is active — has no
-// rendered output of its own, it just wires the map's native click
-// event to onPlace so the parent can turn it into a new pin. The Ping
-// tool reuses this exact same mechanic — armed click-to-place — just
-// wired to a different callback.
-function ClickToPlace({ imageHeight, onPlace }: { imageHeight: number; onPlace: (point: Point) => void }) {
-  useMapEvents({
-    click: (e) => onPlace(latLngToPx(imageHeight, e.latlng)),
-  });
-  return null;
+/** A Stage event's pointer position, translated through the stage's current pan/zoom into image pixel space. */
+function stagePointerToImagePoint(stage: Konva.Stage): Point | null {
+  const pointer = stage.getPointerPosition();
+  if (!pointer) return null;
+  const p = stage.getAbsoluteTransform().copy().invert().point(pointer);
+  return { x: p.x, y: p.y };
 }
 
-const PING_ANIMATION_NAME = "hexenductor-ping";
-let pingStyleInjected = false;
-
-// Injected once, globally — cheaper than redeclaring the @keyframes
-// inside every ping marker's own divIcon HTML (which would still work,
-// just duplicated on every ping).
-function ensurePingStyleInjected(): void {
-  if (pingStyleInjected) return;
-  pingStyleInjected = true;
-  const style = document.createElement("style");
-  style.textContent = `@keyframes ${PING_ANIMATION_NAME} { 0% { transform: scale(0.3); opacity: 1; } 100% { transform: scale(2.6); opacity: 0; } }`;
-  document.head.appendChild(style);
-}
-
+const PING_ANIMATION_COLOR = "#c19a5f";
 const PING_RING_COUNT = 3;
 const PING_RING_DELAY_S = 0.35;
 const PING_RING_DURATION_S = 1.3;
 const PING_RING_SIZE = 40;
-const PING_BOX_SIZE = 120; // must comfortably fit the largest ring at its final (2.6x) scale
 
 /** Total time the whole radiating effect takes, in ms — callers should clear `pingAt` no sooner than this, or the last ring cuts off mid-animation. */
 export const PING_EFFECT_DURATION_MS = ((PING_RING_COUNT - 1) * PING_RING_DELAY_S + PING_RING_DURATION_S) * 1000;
 
-function pingIcon() {
-  ensurePingStyleInjected();
-  const half = PING_RING_SIZE / 2;
-  const rings = Array.from({ length: PING_RING_COUNT }, (_, i) => {
-    const delay = i * PING_RING_DELAY_S;
-    return `<div style="
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: ${PING_RING_SIZE}px;
-      height: ${PING_RING_SIZE}px;
-      margin: -${half}px 0 0 -${half}px;
-      box-sizing: border-box;
-      border-radius: 50%;
-      border: 3px solid #c19a5f;
-      opacity: 0;
-      animation: ${PING_ANIMATION_NAME} ${PING_RING_DURATION_S}s ease-out ${delay}s forwards;
-    "></div>`;
-  }).join("");
+/** One radiating ring, scaling 0.3x -> 2.6x while fading out, starting after its own delay — a Konva.Tween equivalent of the old CSS @keyframes divIcon trick. */
+function PingRing({ delay }: { delay: number }) {
+  const ref = useRef<Konva.Circle>(null);
 
-  return divIcon({
-    className: "",
-    html: `<div style="position: relative; width: ${PING_BOX_SIZE}px; height: ${PING_BOX_SIZE}px;">
-      <div style="
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 8px;
-        height: 8px;
-        margin: -4px 0 0 -4px;
-        border-radius: 50%;
-        background: #c19a5f;
-      "></div>
-      ${rings}
-    </div>`,
-    iconSize: [PING_BOX_SIZE, PING_BOX_SIZE],
-    iconAnchor: [PING_BOX_SIZE / 2, PING_BOX_SIZE / 2],
-  });
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    node.scale({ x: 0.3, y: 0.3 });
+    node.opacity(1);
+    const timer = setTimeout(() => {
+      new Konva.Tween({
+        node,
+        duration: PING_RING_DURATION_S,
+        easing: Konva.Easings.EaseOut,
+        scaleX: 2.6,
+        scaleY: 2.6,
+        opacity: 0,
+      }).play();
+    }, delay * 1000);
+    return () => clearTimeout(timer);
+  }, [delay]);
+
+  return <Circle ref={ref} radius={PING_RING_SIZE / 2} stroke={PING_ANIMATION_COLOR} strokeWidth={3} opacity={0} listening={false} />;
+}
+
+function PingEffect({ x, y }: { x: number; y: number }) {
+  return (
+    <Group x={x} y={y} listening={false}>
+      <Circle radius={4} fill={PING_ANIMATION_COLOR} />
+      {Array.from({ length: PING_RING_COUNT }, (_, i) => (
+        <PingRing key={i} delay={i * PING_RING_DELAY_S} />
+      ))}
+    </Group>
+  );
 }
 
 // How often a held-down paint stroke flushes its touched cells as one
@@ -138,74 +87,69 @@ const FOG_OPACITY = 0.92;
 // they're about to re-cover instead of painting blind.
 const FOG_OPACITY_ERASING = 0.35;
 
-// Mounted only in fog-editable mode. Click-drag reveals whichever fog
-// cells the cursor passes over; holding shift at the start of the
-// stroke restores fog (hides) instead — the same mechanism, just the
-// opposite direction, decided once per stroke. Disables map panning
-// for the duration so a drag paints instead of scrolling the map.
-function FogPaintHandler({
-  imageHeight,
-  onPaint,
+function FogLayer({ image, fog, dimmed }: { image: ImageRef; fog: FogOfWar; dimmed: boolean }) {
+  const [pattern] = useImage(fogNoiseTextureDataUrl());
+  const hiddenCells = useMemo(() => hiddenFogCells(image, fog.revealedCells), [image, fog]);
+
+  return (
+    <Shape
+      listening={false}
+      opacity={dimmed ? FOG_OPACITY_ERASING : FOG_OPACITY}
+      fillPatternImage={pattern}
+      fillPatternRepeat="repeat"
+      sceneFunc={(context, shape) => {
+        context.beginPath();
+        for (const key of hiddenCells) {
+          const [col, row] = key.split(",").map(Number) as [number, number];
+          const x0 = col * FOG_CELL_SIZE;
+          const y0 = row * FOG_CELL_SIZE;
+          const x1 = Math.min(x0 + FOG_CELL_SIZE, image.width);
+          const y1 = Math.min(y0 + FOG_CELL_SIZE, image.height);
+          context.rect(x0, y0, x1 - x0, y1 - y0);
+        }
+        context.fillStrokeShape(shape);
+      }}
+    />
+  );
+}
+
+const DEFAULT_MARKER_COLOR = "#c19a5f";
+// The SVG glyphs use fill="currentColor" for CSS-driven theming, which
+// only works while they're live DOM — baked into a data: URI and
+// decoded as a plain <img>, "currentColor" instead resolves to black.
+// Substitute the intended color before encoding.
+const GLYPH_COLOR = "#f2efe3";
+
+function LinkMarker({
+  link,
+  color,
+  isSelected,
+  readOnly,
+  onSelect,
 }: {
-  imageHeight: number;
-  onPaint: (cells: string[], revealed: boolean) => void;
+  link: Link;
+  color: string;
+  isSelected: boolean;
+  readOnly: boolean;
+  onSelect: () => void;
 }) {
-  const stroke = useRef<{
-    revealed: boolean;
-    pending: Set<string>;
-    lastCell: string | null;
-    flushTimer: ReturnType<typeof setInterval>;
-  } | null>(null);
+  const size = isSelected ? 36 : 28;
+  const glyphSize = Math.round(size * 0.68);
+  const iconDef = findLinkIcon(link.icon);
+  const iconUrl = iconDef ? `data:image/svg+xml,${encodeURIComponent(iconDef.svg.replace(/currentColor/g, GLYPH_COLOR))}` : "";
+  const [glyphImg] = useImage(iconUrl);
 
-  function flush() {
-    const s = stroke.current;
-    if (!s || s.pending.size === 0) return;
-    onPaint([...s.pending], s.revealed);
-    s.pending.clear();
-  }
+  const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    e.cancelBubble = true;
+    onSelect();
+  };
 
-  function endStroke() {
-    const s = stroke.current;
-    if (!s) return;
-    clearInterval(s.flushTimer);
-    flush();
-    stroke.current = null;
-  }
-
-  const map = useMapEvents({
-    mousedown: (e) => {
-      const revealed = !(e.originalEvent as MouseEvent).shiftKey;
-      const cell = fogCellAt(latLngToPx(imageHeight, e.latlng));
-      stroke.current = {
-        revealed,
-        pending: new Set([cell]),
-        lastCell: cell,
-        flushTimer: setInterval(flush, FOG_PAINT_FLUSH_MS),
-      };
-    },
-    mousemove: (e) => {
-      const s = stroke.current;
-      if (!s) return;
-      const cell = fogCellAt(latLngToPx(imageHeight, e.latlng));
-      if (cell === s.lastCell) return;
-      s.lastCell = cell;
-      s.pending.add(cell);
-    },
-    mouseup: endStroke,
-  });
-
-  useEffect(() => {
-    map.dragging.disable();
-    window.addEventListener("mouseup", endStroke);
-    return () => {
-      map.dragging.enable();
-      window.removeEventListener("mouseup", endStroke);
-      endStroke();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
-
-  return null;
+  return (
+    <Group x={link.x} y={link.y} onClick={readOnly ? undefined : handleSelect} onTap={readOnly ? undefined : handleSelect}>
+      <Circle radius={size / 2} fill="rgba(23,25,20,0.95)" stroke={color} strokeWidth={3} shadowColor="black" shadowOpacity={0.45} shadowBlur={4} />
+      {glyphImg && <KonvaImage image={glyphImg} width={glyphSize} height={glyphSize} offsetX={glyphSize / 2} offsetY={glyphSize / 2} listening={false} />}
+    </Group>
+  );
 }
 
 export interface MapCanvasProps {
@@ -235,9 +179,11 @@ export interface MapCanvasProps {
   onPing?: (point: Point) => void;
   /** A transient "look here" highlight. Include a fresh `key` even for repeat pings at the same spot so the animation restarts — MapCanvas doesn't time this out on its own, the caller clears it. */
   pingAt?: { x: number; y: number; key: number } | null;
+  /** Follow mode, GM side: while set, reports this map's own center/zoom on every pan/zoom gesture. */
+  onViewChange?: (view: { x: number; y: number; zoom: number }) => void;
+  /** Follow mode, follower side: when non-null, imperatively drives this map to match — presentation only, never set alongside onViewChange. */
+  followView?: { x: number; y: number; zoom: number } | null;
 }
-
-const DEFAULT_MARKER_COLOR = "#c19a5f";
 
 export function MapCanvas({
   image,
@@ -245,7 +191,6 @@ export function MapCanvas({
   grid,
   gridVisible = true,
   links,
-  linkTitles,
   selectedLinkId,
   onSelectLink,
   placing = false,
@@ -257,32 +202,165 @@ export function MapCanvas({
   pinging = false,
   onPing,
   pingAt = null,
+  onViewChange,
+  followView = null,
 }: MapCanvasProps) {
-  const bounds: [[number, number], [number, number]] = [
-    [0, 0],
-    [image.height, image.width],
-  ];
+  const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<Konva.Stage>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [baseImage] = useImage(imageUrl);
 
-  const gridPolygons = useMemo(() => {
-    if (!grid) return [];
-    if (grid.type === "hex") {
-      const basis = loadHexBasis(grid);
-      return basis ? buildHexPolygons(basis, image.width, image.height) : [];
-    }
-    return buildSquarePolygons(grid, image.width, image.height);
-  }, [grid, image.width, image.height]);
-
-  const fogCellPolygons = useMemo(() => {
-    if (!fog) return [];
-    return hiddenFogCells(image, fog.revealedCells).map((key) => {
-      const [col, row] = key.split(",").map(Number) as [number, number];
-      return fogCellCorners(col, row, image);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
     });
-  }, [fog, image.width, image.height]);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-  // Only tracked while the paint tool is armed — holding shift previews
-  // erase mode by dimming the fog layer, same key FogPaintHandler reads
-  // to decide a stroke's direction.
+  // Fits the whole image in view once per location (keyed on imageUrl,
+  // which changes whenever the underlying Location does) — deliberately
+  // not reactive after that, same as react-leaflet's own `bounds` prop,
+  // so it doesn't fight the user's own pan/zoom on every re-render.
+  const fittedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || size.width === 0 || size.height === 0) return;
+    if (fittedForRef.current === imageUrl) return;
+    const scale = clamp(Math.min(size.width / image.width, size.height / image.height), MIN_SCALE, MAX_SCALE);
+    stage.scale({ x: scale, y: scale });
+    stage.position({
+      x: (size.width - image.width * scale) / 2,
+      y: (size.height - image.height * scale) / 2,
+    });
+    stage.batchDraw();
+    fittedForRef.current = imageUrl;
+  }, [size.width, size.height, imageUrl, image.width, image.height]);
+
+  // Follower side of Follow mode: drive the stage to match imperatively,
+  // same spirit as the old ViewFollower's map.setView(..., {animate: true}).
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !followView || size.width === 0 || size.height === 0) return;
+    const scale = clamp(2 ** followView.zoom, MIN_SCALE, MAX_SCALE);
+    stage.to({
+      x: size.width / 2 - followView.x * scale,
+      y: size.height / 2 - followView.y * scale,
+      scaleX: scale,
+      scaleY: scale,
+      duration: 0.3,
+      easing: Konva.Easings.EaseInOut,
+    });
+  }, [followView, size.width, size.height]);
+
+  const reportViewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function reportView(stage: Konva.Stage) {
+    if (!onViewChange) return;
+    const scale = stage.scaleX();
+    const center = stage.getAbsoluteTransform().copy().invert().point({ x: size.width / 2, y: size.height / 2 });
+    onViewChange({ x: center.x, y: center.y, zoom: Math.log2(scale) });
+  }
+  function reportViewDebounced(stage: Konva.Stage) {
+    if (reportViewTimer.current) clearTimeout(reportViewTimer.current);
+    reportViewTimer.current = setTimeout(() => reportView(stage), 150);
+  }
+
+  function handleWheel(e: Konva.KonvaEventObject<WheelEvent>) {
+    e.evt.preventDefault();
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    const oldScale = stage.scaleX();
+    const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
+    const newScale = clamp(oldScale * Math.exp(-e.evt.deltaY * 0.001), MIN_SCALE, MAX_SCALE);
+    stage.scale({ x: newScale, y: newScale });
+    stage.position({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
+    stage.batchDraw();
+    reportViewDebounced(stage);
+  }
+
+  function handleDragEnd(e: Konva.KonvaEventObject<DragEvent>) {
+    const stage = e.target.getStage();
+    if (stage) reportView(stage);
+  }
+
+  function handleStageClick(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const point = stagePointerToImagePoint(stage);
+    if (!point) return;
+    if (placing && onPlaceLocation) onPlaceLocation(point);
+    else if (pinging && onPing) onPing(point);
+  }
+
+  // Mounted only while fog painting is active. Click-drag reveals
+  // whichever fog cells the cursor passes over; holding shift at the
+  // start of the stroke restores fog (hides) instead — the same
+  // mechanism, just the opposite direction, decided once per stroke.
+  const stroke = useRef<{
+    revealed: boolean;
+    pending: Set<string>;
+    lastCell: string | null;
+    flushTimer: ReturnType<typeof setInterval>;
+  } | null>(null);
+
+  function flushStroke() {
+    const s = stroke.current;
+    if (!s || s.pending.size === 0 || !onPaintFogCells) return;
+    onPaintFogCells([...s.pending], s.revealed);
+    s.pending.clear();
+  }
+
+  function endStroke() {
+    const s = stroke.current;
+    if (!s) return;
+    clearInterval(s.flushTimer);
+    flushStroke();
+    stroke.current = null;
+  }
+
+  useEffect(() => {
+    if (!fogEditable || !fog) return;
+    window.addEventListener("mouseup", endStroke);
+    return () => {
+      window.removeEventListener("mouseup", endStroke);
+      endStroke();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fogEditable, fog]);
+
+  function handleFogMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
+    if (!fogEditable || !fog || !onPaintFogCells) return;
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const point = stagePointerToImagePoint(stage);
+    if (!point) return;
+    const revealed = !e.evt.shiftKey;
+    const cell = fogCellAt(point);
+    stroke.current = { revealed, pending: new Set([cell]), lastCell: cell, flushTimer: setInterval(flushStroke, FOG_PAINT_FLUSH_MS) };
+  }
+
+  function handleFogMouseMove(e: Konva.KonvaEventObject<MouseEvent>) {
+    const s = stroke.current;
+    if (!s) return;
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const point = stagePointerToImagePoint(stage);
+    if (!point) return;
+    const cell = fogCellAt(point);
+    if (cell === s.lastCell) return;
+    s.lastCell = cell;
+    s.pending.add(cell);
+  }
+
+  // Held down while the paint tool is armed — previews erase mode by
+  // dimming the fog layer, same key handleFogMouseDown reads to decide
+  // a stroke's direction.
   const [shiftHeld, setShiftHeld] = useState(false);
   useEffect(() => {
     if (!fogEditable) {
@@ -304,101 +382,70 @@ export function MapCanvas({
     };
   }, [fogEditable]);
 
+  const gridPolygons = useMemo(() => {
+    if (!grid) return [];
+    if (grid.type === "hex") {
+      const basis = loadHexBasis(grid);
+      return basis ? buildHexPolygons(basis, image.width, image.height) : [];
+    }
+    return buildSquarePolygons(grid, image.width, image.height);
+  }, [grid, image.width, image.height]);
+
+  const containerClass = placing || pinging ? "map-stage-container placing" : fogEditable && fog ? "map-stage-container painting-fog" : "map-stage-container";
+
   return (
-    <MapContainer
-      crs={CRS.Simple}
-      bounds={bounds}
-      className={placing || pinging ? "placing" : fogEditable && fog ? "painting-fog" : undefined}
-      style={{ width: "100%", height: "100%", background: "#12150f" }}
-      zoomSnap={0.25}
-      minZoom={-4}
-      maxZoom={3}
-      attributionControl={false}
-    >
-      {placing && onPlaceLocation && <ClickToPlace imageHeight={image.height} onPlace={onPlaceLocation} />}
-      {pinging && onPing && <ClickToPlace imageHeight={image.height} onPlace={onPing} />}
-      {fogEditable && fog && onPaintFogCells && (
-        <FogPaintHandler imageHeight={image.height} onPaint={onPaintFogCells} />
+    <div ref={containerRef} className={containerClass} style={{ width: "100%", height: "100%", background: "#12150f", overflow: "hidden" }}>
+      {size.width > 0 && size.height > 0 && (
+        <Stage
+          ref={stageRef}
+          width={size.width}
+          height={size.height}
+          draggable={!(fogEditable && fog)}
+          onWheel={handleWheel}
+          onDragEnd={handleDragEnd}
+          onClick={handleStageClick}
+          onTap={handleStageClick}
+          onMouseDown={handleFogMouseDown}
+          onMouseMove={handleFogMouseMove}
+          onMouseUp={endStroke}
+        >
+          <Layer>{baseImage && <KonvaImage image={baseImage} width={image.width} height={image.height} listening={false} />}</Layer>
+
+          <Layer>
+            {gridVisible &&
+              gridPolygons.map((corners, i) => (
+                <Line
+                  key={i}
+                  points={corners.flatMap((p) => [p.x, p.y])}
+                  closed
+                  stroke={grid ? grid.style.color : DEFAULT_MARKER_COLOR}
+                  strokeWidth={grid ? grid.style.weight : 1}
+                  opacity={grid ? grid.style.opacity : 0.45}
+                  listening={false}
+                />
+              ))}
+          </Layer>
+
+          <Layer>
+            {links
+              .filter((link) => !link.hidden)
+              .map((link) => (
+                <LinkMarker
+                  key={link.id}
+                  link={link}
+                  color={link.color ?? DEFAULT_MARKER_COLOR}
+                  isSelected={link.id === selectedLinkId}
+                  readOnly={readOnly}
+                  onSelect={() => onSelectLink?.(link.id)}
+                />
+              ))}
+          </Layer>
+
+          <Layer>{fog && <FogLayer image={image} fog={fog} dimmed={shiftHeld} />}</Layer>
+
+          <Layer>{pingAt && <PingEffect key={pingAt.key} x={pingAt.x} y={pingAt.y} />}</Layer>
+        </Stage>
       )}
-      {fogCellPolygons.length > 0 && <FogNoiseDefs />}
-      <ImageOverlay url={imageUrl} bounds={bounds} />
-
-      {gridVisible && gridPolygons.map((corners, i) => (
-        <Polygon
-          key={i}
-          positions={polygonToLatLngs(image.height, corners)}
-          pathOptions={{
-            color: grid ? grid.style.color : DEFAULT_MARKER_COLOR,
-            weight: grid ? grid.style.weight : 1,
-            opacity: grid ? grid.style.opacity : 0.45,
-            fill: false,
-            interactive: false,
-          }}
-        />
-      ))}
-
-      {links
-        .filter((link) => !link.hidden)
-        .map((link) => {
-          const color = link.color ?? DEFAULT_MARKER_COLOR;
-          const isSelected = link.id === selectedLinkId;
-          const size = isSelected ? 36 : 28;
-          const glyph = findLinkIcon(link.icon)?.svg ?? "";
-          const glyphSize = Math.round(size * 0.68);
-          const icon = divIcon({
-            className: "",
-            html: `<div style="
-              width: ${size}px;
-              height: ${size}px;
-              border-radius: 50%;
-              background: rgba(23,25,20,0.95);
-              border: 3px solid ${color};
-              box-shadow: 0 0 0 2px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.6);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: #f2efe3;
-            ">${glyph.replace("<svg ", `<svg width="${glyphSize}" height="${glyphSize}" `)}</div>`,
-            iconSize: [size, size],
-            iconAnchor: [size / 2, size / 2],
-          });
-
-          return (
-            <Marker
-              key={link.id}
-              position={pxToLatLng(image.height, link)}
-              icon={icon}
-              eventHandlers={
-                readOnly
-                  ? {}
-                  : {
-                      click: () => onSelectLink?.(link.id),
-                    }
-              }
-            >
-              <Popup>
-                <strong>{linkTitles[link.target] ?? link.target}</strong>
-                <br />
-                <span style={{ opacity: 0.7 }}>{link.type}</span>
-              </Popup>
-            </Marker>
-          );
-        })}
-
-      {fogCellPolygons.map((corners, i) => (
-        <Polygon
-          key={i}
-          positions={polygonToLatLngs(image.height, corners)}
-          pathOptions={{
-            color: "transparent",
-            fillColor: `url(#${FOG_PATTERN_ID})`,
-            fillOpacity: shiftHeld ? FOG_OPACITY_ERASING : FOG_OPACITY,
-            interactive: false,
-          }}
-        />
-      ))}
-
-      {pingAt && <Marker key={pingAt.key} position={pxToLatLng(image.height, pingAt)} icon={pingIcon()} interactive={false} />}
-    </MapContainer>
+    </div>
   );
 }

@@ -4,7 +4,7 @@
 ![](hex-enductor.png)
 
 
-__Hex Enductor__ is a Leaflet-based annotation and GM presentation tool for TTRPGs. It intends to support live, in-person play and supports on-the-fly editing of the mapped environment that syncs to pluggable content.
+__Hex Enductor__ is an annotation and GM presentation tool for TTRPGs. It intends to support live, in-person play and supports on-the-fly editing of the mapped environment that syncs to pluggable content.
 
 WIP, alpha, and very very overly suited to mine own ends. Feel free to swing by with features, bugs, all that whatnot, hopefully what's been done here is worthy to someone, even in our most decrepit futures to which we look forward in horror, more often than occasional, at the sight of our own ghosts gouged out of us and playing silly buggers among themselves.
 
@@ -54,7 +54,7 @@ Take a look at `examples/demo` to show how it works at present — its `notice-b
 | `packages/hexen-schema` | The `.hexen.yml` format itself. |
 | `packages/content-resolver` | Base interface for resolving location content |
 | `packages/content-obsidian` | Reads and renders an Obsidian vault's YAML frontmatter + Markdown body directly. |
-| `packages/map-core` | `<MapCanvas>`, a react-leaflet wrapper — the hex-grid math, the image overlay, the pins. Shared by the editor and (eventually) the wiki embed. |
+| `packages/map-core` | `<MapCanvas>`, a Konva (canvas) map view — the hex-grid math, the image overlay, the pins. Shared by the editor and (eventually) the wiki embed. |
 | `packages/project-ops` | Pure project mutations (save a link, add a location, etc.) shared by hexend and the editor's own browser-native storage backend. |
 | `apps/hexend` | The local server (Rust) — opens a .hexen.yml file, serves map images and other content from the project directory, and pushes live state to every connected client over its `/ws` session. One of two ways the editor can read/write a project; see "Quickstart" above for the other. |
 | `apps/editor` | The GM-facing app — open a project (from the server above, or straight from a folder in the browser), click a pin, edit it, save. In GM mode it also controls fog of war. |
@@ -63,5 +63,3 @@ Take a look at `examples/demo` to show how it works at present — its `notice-b
 ## License
 
 [MIT](LICENSE).
-
-We recognise and support `react-leaflet`'s use of Hippocratic License 2.1

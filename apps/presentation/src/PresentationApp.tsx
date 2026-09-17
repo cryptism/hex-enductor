@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MapCanvas, findLinkIcon, PING_EFFECT_DURATION_MS } from "@hex-enductor/map-core";
 import { connectLiveSession, type OpenedProjectData } from "@hex-enductor/live-session";
+import { addRecentTarget, getRecentTargets } from "./recentTargets.ts";
 
 function dirname(path: string): string {
   const i = path.lastIndexOf("/");
@@ -29,10 +30,10 @@ function targetFromUrl(): Target | null {
 // fog of war included, with no separate "read-only mode" to keep in
 // sync elsewhere. Fog is applied/removed from the editor's own GM
 // mode (see apps/editor), not here — this window just shows the
-// result, same as it would any other command. A Ping is the one
-// exception with a side effect here: receiving one for a different
-// location switches this window to it too, since drawing attention to
-// a spot only makes sense once everyone's looking at the same map.
+// result, same as it would any other command. Ping and Follow mode
+// both have a side effect here: receiving either for a different
+// location switches this window to it too, since neither one makes
+// sense unless everyone's looking at the same map.
 export function PresentationApp() {
   const target = useMemo(targetFromUrl, []);
   const [data, setData] = useState<OpenedProjectData | null>(null);
@@ -42,12 +43,18 @@ export function PresentationApp() {
   const [pingAt, setPingAt] = useState<{ x: number; y: number; key: number } | null>(null);
   const pingKeyRef = useRef(0);
   const pingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The last view broadcast while Follow mode was on — kept, not
+  // cleared, once updates stop arriving (Follow mode switched off on
+  // the GM's end): MapCanvas only re-applies it when it *changes*, so
+  // this window is free to pan/zoom on its own from then on.
+  const [followView, setFollowView] = useState<{ x: number; y: number; zoom: number } | null>(null);
 
   useEffect(() => {
     if (!target) return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     let unsubscribePing: (() => void) | undefined;
+    let unsubscribeFollowView: (() => void) | undefined;
 
     connectLiveSession(target.server, target.path)
       .then((session) => {
@@ -55,6 +62,7 @@ export function PresentationApp() {
           session.close();
           return;
         }
+        addRecentTarget(target);
         setData(session.initial);
         unsubscribe = session.subscribe(setData);
         unsubscribePing = session.onPing((ping) => {
@@ -64,6 +72,10 @@ export function PresentationApp() {
           setPingAt({ x: ping.x, y: ping.y, key: pingKeyRef.current });
           pingTimeoutRef.current = setTimeout(() => setPingAt(null), PING_EFFECT_DURATION_MS);
         });
+        unsubscribeFollowView = session.onFollowView((view) => {
+          setCurrentLocationId(view.locationId);
+          setFollowView({ x: view.x, y: view.y, zoom: view.zoom });
+        });
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
 
@@ -71,6 +83,7 @@ export function PresentationApp() {
       cancelled = true;
       unsubscribe?.();
       unsubscribePing?.();
+      unsubscribeFollowView?.();
     };
   }, [target]);
 
@@ -97,9 +110,27 @@ export function PresentationApp() {
   }, []);
 
   if (!target) {
+    const recent = getRecentTargets();
     return (
-      <div className="status">
-        Add <code>?server=http://localhost:4000&amp;path=/abs/project.hexen.yml</code> to the URL.
+      <div className="status landing">
+        <p>
+          Add <code>?server=http://localhost:4000&amp;path=/abs/project.hexen.yml</code> to the URL.
+        </p>
+        {recent.length > 0 && (
+          <div className="recent-targets">
+            <h3>Recently opened</h3>
+            <ul>
+              {recent.map((t) => (
+                <li key={`${t.server}|${t.path}`}>
+                  <a href={`?server=${encodeURIComponent(t.server)}&path=${encodeURIComponent(t.path)}`}>
+                    {t.path}
+                    <span className="recent-target-server"> — {t.server}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     );
   }
@@ -147,6 +178,7 @@ export function PresentationApp() {
             onSelectLink={goToLink}
             fog={currentLocation.fog}
             pingAt={pingAt}
+            followView={followView}
           />
         ) : (
           <div className="status">"{currentLocation.id}" has no image — nothing to render.</div>

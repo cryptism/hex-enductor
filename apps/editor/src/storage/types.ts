@@ -22,6 +22,9 @@ export interface ProjectStorage {
   /** Purely ephemeral — never touches project state. A no-op on backends with no live session to broadcast over (local-fs). */
   ping(locationId: string, x: number, y: number): void;
   onPing(onPing: (ping: { locationId: string; x: number; y: number }) => void): () => void;
+  /** Just as ephemeral as ping — the GM's own map view, for Follow mode. */
+  followView(locationId: string, x: number, y: number, zoom: number): void;
+  onFollowView(onFollowView: (view: { locationId: string; x: number; y: number; zoom: number }) => void): () => void;
   undo(): void;
   redo(): void;
   getImageUrl(file: string): Promise<string>;

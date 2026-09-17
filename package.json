@@ -14,7 +14,9 @@
     "test": "bun run --filter '*' test && bun test scripts",
     "schema:docs": "bun run --cwd packages/hexen-schema docs",
     "migrate:obsidian": "bun run scripts/import-obsidian-vault.ts",
-    "migrate:obsidian:strip": "bun run scripts/strip-obsidian-frontmatter.ts"
+    "migrate:obsidian:strip": "bun run scripts/strip-obsidian-frontmatter.ts",
+    "dev:all": "bun run dev:hexend & bun run dev:editor & bun run dev:presentation",
+    "launch": "bun run scripts/launch.ts"
   },
   "dependencies": {
     "@hex-enductor/hexen-schema": "workspace:*",

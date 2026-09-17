@@ -25,8 +25,8 @@ use crate::pathutil::{resolve, resolve_cwd};
 use crate::pb::hexen::v1::{client_message, server_message, ClientMessage, ServerMessage};
 use crate::router::{create_project, list_directory};
 use crate::session::{
-    add_socket, apply_and_broadcast, broadcast_ping, get_or_create_session, redo, remove_socket, session_state, undo,
-    Sessions,
+    add_socket, apply_and_broadcast, broadcast_follow_view, broadcast_ping, get_or_create_session, redo,
+    remove_socket, session_state, undo, Sessions,
 };
 
 #[derive(Clone)]
@@ -127,6 +127,7 @@ async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppSt
                 Some(client_message::Kind::Undo(_)) => undo(&mut guard),
                 Some(client_message::Kind::Redo(_)) => redo(&mut guard),
                 Some(client_message::Kind::Ping(ping)) => broadcast_ping(&guard, ping),
+                Some(client_message::Kind::FollowView(view)) => broadcast_follow_view(&guard, view),
                 None => {}
             }
         }

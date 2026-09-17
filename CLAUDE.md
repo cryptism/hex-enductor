@@ -24,6 +24,19 @@ TS server anymore — don't go looking for `apps/hexend/src/*.ts`.
   `bun run --filter '*'`). `cd apps/hexend && cargo test`/`cargo build`
   directly, inside `nix develop`.
 
+## Map rendering: `packages/map-core` is Konva, not Leaflet
+
+As of 2026-09-17 `<MapCanvas>` (`packages/map-core/src/MapCanvas.tsx`)
+is built on Konva/`react-konva`, not Leaflet — Leaflet's geographic CRS
+and pane/z-index system were a poor fit for what this app actually
+needs (a flat image with a grid and pins), and were the root cause of
+several bugs (misalignment on pan/zoom, shift+click not registering
+during fog paint, fog rendering transparent in presentation). Konva's
+draw order *is* z-order, and everything works directly in the image's
+own pixel space — there's no more lat/lng translation layer
+(`coords.ts` is gone). Don't reach for `leaflet`/`react-leaflet` docs
+or APIs when touching this code.
+
 ## Schema: still mid-migration to protobuf
 
 **`packages/hexen-schema` (hand-written Zod) has not been regenerated
@@ -83,6 +96,21 @@ flagged as a real follow-up. Fixing it properly means either migrating
 
 ## Running things for manual/browser testing
 
+Fast path — one command, from inside `nix develop`, starts all three
+and opens a browser tab for the editor and one for presentation,
+already pointed at the project (`--no-browser` to skip that part):
+
+```
+nix develop --command bash -c 'bun run launch --project examples/demo/demo.hexen.yml'
+```
+
+It picks fixed ports (4000/5173/5174 by default, `--hexend-port`/
+`--editor-port`/`--presentation-port` to override) rather than letting
+Vite "pick a free port" the way the manual dance below does, since it
+needs to know the URLs to open. See `scripts/launch.ts`.
+
+By hand, same result minus the auto-opened tabs:
+
 ```
 nix develop --command bash -c 'cd apps/hexend && cargo run'          # :4000
 nix develop --command bash -c 'bun run --cwd apps/editor dev'        # vite picks a free port
@@ -91,7 +119,9 @@ nix develop --command bash -c 'bun run --cwd apps/presentation dev'  # same
 
 Editor: open the picker, paste the absolute path to a `.hexen.yml`
 (e.g. `examples/demo/demo.hexen.yml`) under "open a project on a
-locally-running server". Presentation: append
+locally-running server" — or append the same
+`?server=http://localhost:4000&path=<ABSOLUTE path>` the launch script
+uses (see `apps/editor/src/server.ts`/`App.tsx`). Presentation: append
 `?server=http://localhost:4000&path=<ABSOLUTE path>` to its URL — it's
 read-only, driven by whatever the editor does.
 
@@ -125,11 +155,9 @@ read-only, driven by whatever the editor does.
   any other state, no editing surface. GM control was briefly built
   there too (`?gm=1`) before moving to the editor — don't resurrect
   that path without a reason, it'd duplicate `FogControls.tsx`.
-- **Known rough edge:** Leaflet renders markers in `markerPane`, which
-  stacks above the fog overlay's pane — link pins stay visible through
-  fog for both GM and player views. Not addressed; would need either a
-  custom pane order or hiding markers under hidden cells explicitly in
-  `MapCanvas.tsx`.
+- Fixed as of the Konva rewrite below: the fog layer draws after the
+  links layer, so a hidden cell now actually covers any pin under it,
+  for both GM and player views.
 
 ## Testing
 

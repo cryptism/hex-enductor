@@ -12,13 +12,13 @@
   },
   "dependencies": {
     "@hex-enductor/hexen-schema": "workspace:*",
-    "leaflet": "^1.9.4",
+    "konva": "^10.5.0",
     "react": "^19.2.8",
-    "react-leaflet": "^5.0.0"
+    "react-konva": "~19.2.7",
+    "use-image": "^1.1.4"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",
-    "@types/leaflet": "^1.9.14",
     "@types/react": "^19.2.7",
     "typescript": "^5.7.2"
   }

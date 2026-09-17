@@ -16,11 +16,32 @@ interface FogControlsProps {
 type BlanketAction = "cover" | "reveal";
 
 /**
+ * The truthful "what do players currently see" readout, kept separate
+ * from FogControls so it can be promoted high in the sidebar (right
+ * below the logo) instead of buried under the mode toggles — it's the
+ * one fog fact a GM needs at a glance, regardless of whether the rest
+ * of the fog panel is even in view.
+ */
+export function FogStatusLine({ image, fog }: { image: ImageRef; fog: FogOfWar | null }) {
+  const { cols, rows } = fogGridDims(image);
+  const totalCells = cols * rows;
+  const hiddenCount = fog ? hiddenFogCells(image, fog.revealedCells).length : 0;
+
+  return (
+    <p className="fog-status fog-status-prominent">
+      {fog
+        ? `Fog is live for players — ${hiddenCount} of ${totalCells} cells hidden.`
+        : "Fog is off — players see the full map."}
+    </p>
+  );
+}
+
+/**
  * GM mode's fog panel — a Krita-style layer toggle (peek under the fog
- * without changing it) plus a status readout that stays truthful about
- * what players see regardless of that peek, always available in GM
- * mode. The paint tool and blanket apply/remove only appear once
- * editMode is also on, since they mutate the project.
+ * without changing it) plus the paint tool and blanket apply/remove,
+ * which only appear once editMode is also on, since they mutate the
+ * project. The status readout itself lives in FogStatusLine, rendered
+ * separately higher up the sidebar.
  */
 export function FogControls({
   image,
@@ -34,18 +55,8 @@ export function FogControls({
 }: FogControlsProps) {
   const [pendingAction, setPendingAction] = useState<BlanketAction | null>(null);
 
-  const { cols, rows } = fogGridDims(image);
-  const totalCells = cols * rows;
-  const hiddenCount = fog ? hiddenFogCells(image, fog.revealedCells).length : 0;
-
   return (
     <div className="fog-controls">
-      <p className="fog-status">
-        {fog
-          ? `Fog is live for players — ${hiddenCount} of ${totalCells} cells hidden.`
-          : "Fog is off — players see the full map."}
-      </p>
-
       <label className="grid-toggle fog-layer-toggle">
         <input type="checkbox" checked={layerVisible} onChange={(e) => onSetLayerVisible(e.target.checked)} />
         Show fog layer
