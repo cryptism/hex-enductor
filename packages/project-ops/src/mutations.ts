@@ -2,9 +2,10 @@ import type { FogOfWar, Grid, HexenProject, ImageRef, Link, Location, ProjectCon
 
 /**
  * Pure, transport-agnostic operations on an in-memory HexenProject —
- * no file I/O, no path, no server. Both apps/hexend's tRPC procedures
- * and the editor's browser-native storage back end call these, so the
- * two never drift apart on what a mutation actually means.
+ * no file I/O, no path, no server. The editor's browser-native storage
+ * backend calls these directly; apps/hexend (Rust) hand-ports the same
+ * logic (see its own mutations.rs) since it isn't part of this bun
+ * workspace, so the two never drift apart on what a mutation means.
  */
 
 export function createMinimalProject(

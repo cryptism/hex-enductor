@@ -1,31 +1,37 @@
 # hex-enductor — working notes
 
-## Two servers, one in-flight migration
+## One server: `apps/hexend` (Rust)
 
-- `apps/hexend` (TypeScript, Hono/tRPC) is the original server. Its WS
-  session (`src/session.ts`) speaks an ad hoc envelope:
-  `{type:"command"|"undo"|"redo", ...}` in, `{type:"state",data:...}` out.
-- `apps/hexend-rs` (Rust, axum) is a from-scratch rewrite — **the
-  intended production/presentation server** — currently untracked/WIP.
-  It shares no code with `apps/hexend`; each command/mutation is
-  hand-ported (see the `//! Port of ...` doc comment at the top of each
-  `apps/hexend-rs/src/*.rs` file — keep both sides in sync by hand when
-  editing either one).
-- Building/testing `apps/hexend-rs` requires `protoc`/`buf`, which only
-  exist in the nix devShell: run everything through
+`apps/hexend` used to be TypeScript (Hono/tRPC); as of 2026-09-17 it's a
+from-scratch Rust rewrite (axum), consolidated from a parallel
+`apps/hexend-rs` that existed briefly during the migration. There is no
+TS server anymore — don't go looking for `apps/hexend/src/*.ts`.
+
+- Its message schema is defined in `schema/hexen/v1/*.proto`.
+  `apps/hexend/build.rs` codegens it into Rust: prost for the structs,
+  pbjson for protobuf's canonical JSON mapping (see "wire-format
+  gotcha" below).
+- Building/testing it requires `protoc`/`buf`, which only exist in the
+  nix devShell: run everything through
   `nix develop --command bash -c '...'`, not directly.
-- `apps/hexend-rs` listens on **port 4001** by default (`PORT` env var
-  to override) — not 4000.
+- Listens on **port 4000** by default (`PORT` env var to override).
+- `bun run dev:hexend` from the repo root runs `cargo run
+  --manifest-path apps/hexend/Cargo.toml` — it's a plain Cargo command
+  wrapped in a bun script, not a bun-native dev server.
+- Not part of the bun workspace (`package.json`'s `workspaces` only
+  globs `packages/*`/`apps/*` for *.json-having packages that bun
+  resolves — a Cargo crate with no package.json is invisible to
+  `bun run --filter '*'`). `cd apps/hexend && cargo test`/`cargo build`
+  directly, inside `nix develop`.
 
-## Schema: mid-migration to protobuf
+## Schema: still mid-migration to protobuf
 
-`schema/hexen/v1/*.proto` is the canonical schema definition now.
-`apps/hexend-rs/build.rs` codegens it into Rust (prost for structs,
-pbjson for protobuf's canonical JSON mapping). **`packages/hexen-schema`
-(hand-written Zod) has not been regenerated from proto** — it's the
-same shapes, modeled the old way, and is what `map-core`, `project-ops`,
-and the editor all still import. There's a referenced-but-not-yet-built
-`packages/hexen-proto-ts` that would eventually replace it.
+**`packages/hexen-schema` (hand-written Zod) has not been regenerated
+from proto** — it's the same shapes, modeled the old "type"-discriminated
+way, and is what `map-core`, `project-ops`, and the editor's in-memory
+project representation all still use. There's a referenced-but-not-yet-built
+`packages/hexen-proto-ts` that would eventually replace it and make the
+wire-format seam below unnecessary.
 
 ### The wire-format gotcha (read this before touching Command/Grid/Content)
 
@@ -38,70 +44,104 @@ every oneof-backed type: `Grid` (hex/square), `ProjectContent` and
 `ClientMessage`/`ServerMessage` envelope itself.
 
 **`packages/live-session/src/wireFormat.ts` is the one seam that
-translates between them.** It was missing until 2026-09-17 — before
-that, `packages/live-session` (and therefore `apps/presentation`) sent
-and expected `apps/hexend`'s ad hoc envelope, which `apps/hexend-rs`
-does not speak, so the presentation app silently hung forever at
-"Connecting…" with no error. If you add a new oneof-shaped field to a
-`.proto` file, or a new `Command` variant, **you must add/extend a
-converter in `wireFormat.ts`** or anything going through
-`connectLiveSession` will fail the same silent way. `wireFormat.test.ts`
-round-trips every existing converter — extend it alongside the schema.
+translates between them**, used by:
+- `packages/live-session/src/liveSession.ts` — every WS message in
+  and out of `connectLiveSession`.
+- `apps/editor/src/ProjectPicker.tsx` — the "New project" POST body's
+  `content` field (via `projectContentToWire`).
+
+If you add a new oneof-shaped field to a `.proto` file, or a new
+`Command` variant, **you must add/extend a converter in
+`wireFormat.ts`** or anything going through `connectLiveSession` (or
+project creation) will fail silently — no error, just a hung
+"Connecting…" or a 400 from the server. `wireFormat.test.ts` round-trips
+every existing converter — extend it alongside the schema. Only convert
+what's actually used: this module briefly carried a full reverse
+direction (`openedProjectDataToWire`, `commandFromWire`,
+`locationContentToWire`) for the old TS server to speak wire format
+back; that's gone now that hexend is Rust-only and gets the wire shape
+for free from prost/pbjson — don't resurrect it without a real caller.
 
 Plain (non-oneof) fields need no conversion: protobuf JSON's default
 camelCase field naming already matches `hexen-schema`'s field names
 (`locationId`, `revealedCells`, `distancePerCell`, etc.).
 
-As of now, **`apps/presentation` (via `live-session`) only works
-against `apps/hexend-rs`**, not `apps/hexend` — the two servers'
-session code diverged the moment `live-session` started speaking
-protobuf JSON.
+### A second, un-migrated dialect: local-fs storage
+
+`apps/editor`'s browser-native storage backend (File System Access API,
+`storage/localFsStorage.ts`) reads and writes `.hexen.yml` files
+directly via `hexen-schema`'s `parseHexenProject`/`serializeHexenProject`
+— the **old** "type"-discriminated YAML shape, not hexend's oneof-shaped
+one. A project file touched by the server and a project file touched by
+local-fs storage are, right now, two different on-disk dialects that
+can't necessarily read each other back (this is exactly the bug that
+made the old TS `apps/hexend` unable to open `examples/demo/demo.hexen.yml`
+after it was migrated — see git history around 2026-09-17). Not fixed;
+flagged as a real follow-up. Fixing it properly means either migrating
+`hexen-schema` itself to the oneof convention, or giving
+`localFsStorage.ts` a `wireFormat.ts`-style conversion step of its own.
 
 ## Running things for manual/browser testing
 
 ```
-nix develop --command bash -c 'cd apps/hexend-rs && cargo run'   # :4001
-nix develop --command bash -c 'bun run --cwd apps/presentation dev'  # :5173-ish, vite picks a free port
+nix develop --command bash -c 'cd apps/hexend && cargo run'          # :4000
+nix develop --command bash -c 'bun run --cwd apps/editor dev'        # vite picks a free port
+nix develop --command bash -c 'bun run --cwd apps/presentation dev'  # same
 ```
 
-Then open:
-`http://localhost:<vite-port>/?server=http://localhost:4001&path=<ABSOLUTE path to a .hexen.yml>&gm=1`
+Editor: open the picker, paste the absolute path to a `.hexen.yml`
+(e.g. `examples/demo/demo.hexen.yml`) under "open a project on a
+locally-running server". Presentation: append
+`?server=http://localhost:4000&path=<ABSOLUTE path>` to its URL — it's
+read-only, driven by whatever the editor does.
 
-`&gm=1` is the GM/operator window — it's the only one with fog-of-war
-controls. Drop it for the player-facing/projector window.
-
-## Fog of war (issue #6) — basic PoC, landed 2026-09-17
+## Fog of war (issue #6) — landed 2026-09-17
 
 - `Location.fog: FogOfWar | null` — presence (even empty) means fog is
   on. `FogOfWar.revealedCells: string[]` — opaque cell keys, meaningless
   to the server.
 - Commands: `setFog` (start with `{revealedCells:[]}` / clear with
-  `null`) and `toggleFogCell` (errors if fog hasn't been started).
+  `null`) and `setFogCells` (batch-sets a list of cells' revealed state
+  explicitly — plural and idempotent-by-design so a click-drag paint
+  stroke lands as one command per ~80ms tick, not one per cell).
 - Cell addressing is a **fixed 64px grid over the image**, independent
   of whatever terrain grid (hex/square/none) the Location has — see
-  `packages/map-core/src/fog.ts`. This means a location without any
-  terrain grid can still have fog.
-- The control surface is **the presentation app itself** (`?gm=1`),
-  not the editor — clicking the map toggles whichever fog cell was
-  clicked. This matches the issue's own wording ("GM can apply and
-  selectively remove fog on a map in the Presentation view").
+  `packages/map-core/src/fog.ts`.
+- **Control lives in the editor** (`apps/editor`), via two independent
+  toggles in `store.ts`/`App.tsx`:
+  - `gmMode` alone: a read-only, Krita-style "layers panel" — a
+    fog-layer visibility checkbox that only affects the GM's own view
+    (never sends a command), plus a status line that always states
+    what players currently see, regardless of that local peek. See
+    `FogControls.tsx`.
+  - `gmMode` + `editMode` together: unlocks the "Paint fog" tool
+    (armed like Add Location — click-drag reveals, shift reverses to
+    restore, decided once per stroke) and "Fog entire map"/"Reveal
+    entire map" blanket actions behind a confirm modal.
+  - Holding shift while painting also live-dims the fog overlay so you
+    can see what you're about to re-cover (`MapCanvas.tsx`'s
+    `shiftHeld` state, cosmetic only — doesn't touch the paint logic).
+- `apps/presentation` is pure read-only: it renders `location.fog` like
+  any other state, no editing surface. GM control was briefly built
+  there too (`?gm=1`) before moving to the editor — don't resurrect
+  that path without a reason, it'd duplicate `FogControls.tsx`.
 - **Known rough edge:** Leaflet renders markers in `markerPane`, which
   stacks above the fog overlay's pane — link pins stay visible through
-  fog for both GM and player views. Not addressed yet; would need
-  either a custom pane order or hiding markers under hidden cells
-  explicitly in `MapCanvas.tsx`.
+  fog for both GM and player views. Not addressed; would need either a
+  custom pane order or hiding markers under hidden cells explicitly in
+  `MapCanvas.tsx`.
 
 ## Testing
 
 ```
 nix develop --command bash -c 'bun run --filter "*" test'   # every TS workspace
-nix develop --command bash -c 'cd apps/hexend-rs && cargo test'
+nix develop --command bash -c 'cd apps/hexend && cargo test'
 nix develop --command bash -c 'bun run typecheck'
 ```
 
 Known pre-existing (unrelated) typecheck failure:
 `scripts/sync-link-icons.ts:81` — `TS2532: Object is possibly
-'undefined'`. Not caused by any fog/session work; low priority, hasn't
+'undefined'`. Not caused by any hexend/fog work; low priority, hasn't
 been triaged.
 
 ## Issue tracking

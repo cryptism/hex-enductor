@@ -24,9 +24,9 @@ export interface LiveSession {
   close(): void;
 }
 
-// hexend-rs's ServerMessage — protobuf JSON mapping, not a
-// discriminated union: `state` is just this message's one field, and
-// its own oneof-shaped fields still need wireFormat.ts's conversion.
+// hexend's ServerMessage — protobuf JSON mapping, not a discriminated
+// union: `state` is just this message's one field, and its own
+// oneof-shaped fields still need wireFormat.ts's conversion.
 interface WireServerMessage {
   state?: Parameters<typeof openedProjectDataFromWire>[0];
 }

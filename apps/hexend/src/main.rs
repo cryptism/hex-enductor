@@ -1,25 +1,23 @@
-// Bun dev entrypoint. A Node production entrypoint is just
-// `serve(app)` from `@hono/node-server` wrapping the same `app` export
-// — not written yet, not needed to prove this out.
-import { app, websocket } from "./server.ts";
+use hexend::{server, session};
 
-const port = Number(process.env.PORT ?? 4000);
-
-const BANNER = `
+const BANNER: &str = r#"
   ██║  ██║███████╗██╗  ██╗███████╗███╗   ██╗██████╗
   ██╠══██║██╠════╝╚██╗██╔╝██╠════╝████╗  ██║██╠══██╗
   ███████║█████╗   ╚███╔╝ █████╗  ██╔██╗ ██║██║  ██║
   ██╠══██║██╠══╝   ██╔██╗ ██╠══╝  ██║╚██╗██║██║  ██║
   ██║  ██║███████╗██╔╝ ██╗███████╗██║ ╚████║██████╔╝
   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝
-`;
+"#;
 
-console.log(BANNER);
-console.log(`  it has opened an eye at http://localhost:${port}, and it does not blink.`);
-console.log(`  feed it a .hexen.yml, or feed it nothing — it will wait either way.\n`);
+#[tokio::main]
+async fn main() {
+    let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(4000);
 
-export default {
-  port,
-  fetch: app.fetch,
-  websocket,
-};
+    println!("{BANNER}");
+    println!("  it has opened an eye at http://localhost:{port}, and it does not blink.");
+    println!("  feed it a .hexen.yml, or feed it nothing — it will wait either way.\n");
+
+    let app = server::app(session::new_sessions());
+    let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await.expect("bind port");
+    axum::serve(listener, app).await.expect("server error");
+}

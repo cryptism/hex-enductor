@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "./store.ts";
-import { trpc } from "./trpc.ts";
+import { serverUrl } from "./server.ts";
+import { projectContentToWire } from "@hex-enductor/live-session";
 import { getRecentProjects } from "./recentProjects.ts";
 import { addLocalRecent, getLocalRecents, type LocalRecentEntry } from "./localRecents.ts";
 import { createLocalFsStorage, supportsLocalFs } from "./storage/index.ts";
@@ -13,28 +14,67 @@ function slugify(title: string): string {
   return title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "location";
 }
 
+interface DirEntry {
+  name: string;
+  isDirectory: boolean;
+  isProject: boolean;
+}
+
+interface DirectoryListing {
+  path: string;
+  parent: string | null;
+  entries: DirEntry[];
+}
+
 function DirectoryBrowser({ onOpen }: { onOpen: (path: string) => void }) {
   const [browsePath, setBrowsePath] = useState<string | undefined>(undefined);
-  const listing = trpc.listDirectory.useQuery({ path: browsePath });
+  const [listing, setListing] = useState<DirectoryListing | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const url = new URL("/directory", serverUrl());
+    if (browsePath) url.searchParams.set("path", browsePath);
+    fetch(url)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await res.text());
+        return (await res.json()) as DirectoryListing;
+      })
+      .then((data) => {
+        if (!cancelled) setListing(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [browsePath]);
 
   return (
     <div className="browser">
-      {listing.isLoading && <p className="status">Loading…</p>}
-      {listing.isError && <p className="status error">{listing.error.message}</p>}
-      {listing.data && (
+      {loading && <p className="status">Loading…</p>}
+      {error && <p className="status error">{error}</p>}
+      {listing && (
         <>
-          <div className="browser-path">{listing.data.path}</div>
+          <div className="browser-path">{listing.path}</div>
           <ul className="browser-list">
-            {listing.data.parent !== null && (
+            {listing.parent !== null && (
               <li>
-                <button onClick={() => setBrowsePath(listing.data!.parent!)}>.. (up)</button>
+                <button onClick={() => setBrowsePath(listing.parent!)}>.. (up)</button>
               </li>
             )}
-            {listing.data.entries.map((entry) => (
+            {listing.entries.map((entry) => (
               <li key={entry.name}>
                 <button
                   onClick={() => {
-                    const full = joinPath(listing.data!.path, entry.name);
+                    const full = joinPath(listing.path, entry.name);
                     if (entry.isDirectory) setBrowsePath(full);
                     else onOpen(full);
                   }}
@@ -43,7 +83,7 @@ function DirectoryBrowser({ onOpen }: { onOpen: (path: string) => void }) {
                 </button>
               </li>
             ))}
-            {listing.data.entries.length === 0 && <li className="muted">Nothing to open here.</li>}
+            {listing.entries.length === 0 && <li className="muted">Nothing to open here.</li>}
           </ul>
         </>
       )}
@@ -160,8 +200,36 @@ export function ProjectPicker({ onClose }: ProjectPickerProps) {
   const [recent] = useState(() => getRecentProjects());
   const [localRecent, setLocalRecent] = useState<LocalRecentEntry[]>([]);
   const [localError, setLocalError] = useState<string | undefined>(undefined);
-  const createProject = trpc.createProject.useMutation();
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [createError, setCreateError] = useState<string | undefined>(undefined);
   const localFsSupported = supportsLocalFs();
+
+  async function createProject(values: NewProjectValues) {
+    setCreatingProject(true);
+    setCreateError(undefined);
+    try {
+      const res = await fetch(`${serverUrl()}/project`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: values.path,
+          title: values.title,
+          defaultLocationId: slugify(values.title),
+          content: projectContentToWire(
+            values.content.type === "obsidian"
+              ? { type: "obsidian", vaultRoot: values.content.vaultRoot }
+              : { type: "inline" },
+          ),
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      openAndClose(values.path);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreatingProject(false);
+    }
+  }
 
   useEffect(() => {
     if (localFsSupported) getLocalRecents().then(setLocalRecent);
@@ -261,23 +329,7 @@ export function ProjectPicker({ onClose }: ProjectPickerProps) {
       <button className="link-button" onClick={() => setCreating((c) => !c)}>
         {creating ? "Cancel new project" : "New project…"}
       </button>
-      {creating && (
-        <NewProjectForm
-          saving={createProject.isPending}
-          error={createProject.error?.message}
-          onCreate={(values) =>
-            createProject.mutate(
-              {
-                path: values.path,
-                title: values.title,
-                defaultLocationId: slugify(values.title),
-                content: values.content,
-              },
-              { onSuccess: () => openAndClose(values.path) },
-            )
-          }
-        />
-      )}
+      {creating && <NewProjectForm saving={creatingProject} error={createError} onCreate={createProject} />}
 
       {recent.length > 0 && (
         <div className="recent-projects">

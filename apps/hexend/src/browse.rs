@@ -1,6 +1,6 @@
 //! Same trust model as the rest of the server — no auth, no jail. This
 //! just gives the editor something nicer than "paste an absolute path"
-//! to open a project with. Port of apps/hexend/src/browse.ts.
+//! to open a project with.
 
 use std::path::Path;
 

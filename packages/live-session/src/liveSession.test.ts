@@ -1,13 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { connectLiveSession } from "./liveSession.ts";
 
-// A minimal stand-in for hexend-rs's /ws session, speaking its actual
+// A minimal stand-in for hexend's /ws session, speaking its actual
 // wire format (protobuf JSON mapping — see wireFormat.ts): sends an
 // initial "state" on connect, then echoes whatever it receives back
 // as another "state" so this suite can exercise connectLiveSession's
 // protocol handling — handshake, subscribe fan-out, and
-// execute/undo/redo wire format — without spinning up all of
-// hexend-rs.
+// execute/undo/redo wire format — without spinning up all of hexend.
 let server: ReturnType<typeof Bun.serve>;
 
 const MINIMAL_WIRE_PROJECT = {

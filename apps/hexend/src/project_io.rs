@@ -52,7 +52,6 @@ pub enum OpenError {
     Parse(#[from] ParseError),
 }
 
-/// Port of apps/hexend/src/projectIO.ts's openProject.
 pub async fn open_project(path: &Path) -> Result<OpenedProject, OpenError> {
     let yaml_text = tokio::fs::read_to_string(path).await?;
     let ParsedHexenProject { project, warnings } = parse_hexen_project(&yaml_text)?;

@@ -14,7 +14,7 @@ WIP, alpha, and very very overly suited to mine own ends. Feel free to swing by 
 
 The hosted editor at [hex-enductor.pages.dev](https://hex-enductor.pages.dev) can open a project folder directly in the browser — no install, no server, nothing to run. Click **Open from this browser…**, pick a folder with a `.hexen.yml` in it, and you're editing. This needs a Chromium-based browser (Chrome, Edge) — Firefox and Safari don't support the underlying File System Access API yet.
 
-If your project uses an Obsidian vault for content rather than inline content, or your browser doesn't support that API, run the small local server instead and connect to it from the hosted page:
+If your project uses an Obsidian vault for content rather than inline content, or your browser doesn't support that API, run the small local server instead and connect to it from the hosted page. The server is a Rust binary, so you'll need `rustc`/`cargo` plus `protoc`/`buf` on `PATH` — `nix develop` provides all four via `flake.nix`:
 
 ```sh
 bun install
@@ -27,7 +27,7 @@ That "same machine" part matters for the server path specifically: the hosted pa
 
 ### Full local setup
 
-Requires [Bun](https://bun.sh) — `flake.nix` provides it (and Node, for whenever a production entrypoint exists) via `nix develop`, or install it yourself.
+Requires [Bun](https://bun.sh) for the editor, and `rustc`/`cargo`/`protoc`/`buf` for `apps/hexend` (a Rust binary — its message schema is defined in `schema/hexen/v1/*.proto`). `flake.nix` provides all of it (plus Node, for whenever a production entrypoint exists) via `nix develop`, or install it all yourself.
 
 ```sh
 bun install
@@ -56,8 +56,9 @@ Take a look at `examples/demo` to show how it works at present — its `notice-b
 | `packages/content-obsidian` | Reads and renders an Obsidian vault's YAML frontmatter + Markdown body directly. |
 | `packages/map-core` | `<MapCanvas>`, a react-leaflet wrapper — the hex-grid math, the image overlay, the pins. Shared by the editor and (eventually) the wiki embed. |
 | `packages/project-ops` | Pure project mutations (save a link, add a location, etc.) shared by hexend and the editor's own browser-native storage backend. |
-| `apps/hexend` | The local server — opens a .hexen.yml file, serves map images and other content from the project directory. One of two ways the editor can read/write a project; see "Quickstart" above for the other. |
-| `apps/editor` | The GM-facing app — open a project (from the server above, or straight from a folder in the browser), click a pin, edit it, save. |
+| `apps/hexend` | The local server (Rust) — opens a .hexen.yml file, serves map images and other content from the project directory, and pushes live state to every connected client over its `/ws` session. One of two ways the editor can read/write a project; see "Quickstart" above for the other. |
+| `apps/editor` | The GM-facing app — open a project (from the server above, or straight from a folder in the browser), click a pin, edit it, save. In GM mode it also controls fog of war. |
+| `apps/presentation` | A read-only display for a second monitor/projector — follows the editor's live state, fog included. |
 
 ## License
 

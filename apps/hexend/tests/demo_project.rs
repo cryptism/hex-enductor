@@ -7,7 +7,7 @@ fn demo_path() -> PathBuf {
 #[tokio::test]
 async fn opens_the_demo_project_end_to_end() {
     let path = demo_path();
-    let opened = hexend_rs::project_io::open_project(&path).await.expect("open_project");
+    let opened = hexend::project_io::open_project(&path).await.expect("open_project");
 
     assert_eq!(opened.project.title, "Demo Realm");
     assert_eq!(opened.project.default_location, "town");
@@ -33,10 +33,10 @@ async fn opens_the_demo_project_end_to_end() {
 async fn round_trips_through_yaml() {
     let path = demo_path();
     let yaml_text = tokio::fs::read_to_string(&path).await.unwrap();
-    let parsed = hexend_rs::project_io::parse_hexen_project(&yaml_text).expect("parse");
+    let parsed = hexend::project_io::parse_hexen_project(&yaml_text).expect("parse");
 
-    let reserialized = hexend_rs::project_io::serialize_hexen_project(&parsed.project).expect("serialize");
-    let reparsed = hexend_rs::project_io::parse_hexen_project(&reserialized).expect("reparse");
+    let reserialized = hexend::project_io::serialize_hexen_project(&parsed.project).expect("serialize");
+    let reparsed = hexend::project_io::parse_hexen_project(&reserialized).expect("reparse");
 
     assert_eq!(parsed.project, reparsed.project);
 }

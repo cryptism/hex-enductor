@@ -1,5 +1,5 @@
 import { connectLiveSession, type LiveSession } from "@hex-enductor/live-session";
-import { serverUrl } from "../trpc.ts";
+import { serverUrl } from "../server.ts";
 import type { OpenedProjectData, ProjectStorage } from "./types.ts";
 
 function dirname(path: string): string {

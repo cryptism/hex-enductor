@@ -4,7 +4,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
 async fn start_server() -> u16 {
-    let app = hexend_rs::server::app(hexend_rs::session::new_sessions());
+    let app = hexend::server::app(hexend::session::new_sessions());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
@@ -99,7 +99,7 @@ async fn tempfile_project() -> std::path::PathBuf {
     let src = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/demo/demo.hexen.yml");
     let vault_src = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/demo/_vault");
 
-    let dir = std::env::temp_dir().join(format!("hexend-rs-test-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("hexend-test-{}", uuid::Uuid::new_v4()));
     tokio::fs::create_dir_all(&dir).await.unwrap();
     let dest = dir.join("demo.hexen.yml");
     tokio::fs::copy(&src, &dest).await.unwrap();

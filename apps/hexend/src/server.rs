@@ -1,11 +1,11 @@
-//! HTTP + WS surface. Port of apps/hexend/src/server.ts.
+//! HTTP + WS surface.
 //!
 //! The one way a client learns or changes a project's live state:
 //! connect to /ws, get the current state immediately, then send
 //! commands and receive a fresh "state" broadcast — including every
 //! other client watching the same path — after each one lands.
-//! hexend-rs is authoritative: it applies and persists a command
-//! before anyone (including the sender) sees its effect.
+//! hexend is authoritative: it applies and persists a command before
+//! anyone (including the sender) sees its effect.
 
 use std::path::Path;
 
@@ -45,7 +45,7 @@ pub fn app(sessions: Sessions) -> Router {
 }
 
 async fn root() -> &'static str {
-    "hexend-rs is awake, and watching your maps."
+    "hexend is awake, and watching your maps."
 }
 
 #[derive(Deserialize)]

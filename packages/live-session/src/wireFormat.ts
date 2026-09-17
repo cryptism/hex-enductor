@@ -12,7 +12,7 @@ import type { Command } from "@hex-enductor/project-ops";
 import type { OpenedProjectData } from "./protocol.ts";
 
 /**
- * hexend-rs speaks its schema's own protobuf JSON mapping on the wire:
+ * hexend (Rust) speaks its schema's own protobuf JSON mapping on the wire:
  * a proto3 `oneof` serializes as `{ <selected field name>: value }`,
  * never the `{ type: "...", ...fields }` discriminated-union shape
  * hexen-schema (and everything built on it — map-core, project-ops,
@@ -60,13 +60,6 @@ export function locationContentFromWire(wire: WireLocationContent | null | undef
   if (!wire) return null;
   if (wire.obsidian) return { type: "obsidian", ref: wire.obsidian.ref };
   return { type: "inline", title: wire.inline!.title, body: wire.inline!.body ?? "" };
-}
-
-export function locationContentToWire(content: LocationContent | null): WireLocationContent | null {
-  if (!content) return null;
-  return content.type === "obsidian"
-    ? { obsidian: { ref: content.ref } }
-    : { inline: { title: content.title, body: content.body } };
 }
 
 interface WireLocation {
@@ -123,40 +116,6 @@ export function openedProjectDataFromWire(wire: WireOpenedProjectData): OpenedPr
   };
 }
 
-// The other direction — used by a server (apps/hexend today; hexend-rs
-// gets this for free from prost/pbjson) to broadcast its own state in
-// the same wire shape a client's openedProjectDataFromWire expects.
-
-function locationToWire(location: Location): WireLocation {
-  return {
-    id: location.id,
-    grid: gridToWire(location.grid),
-    image: location.image,
-    content: locationContentToWire(location.content),
-    links: location.links,
-    fog: location.fog,
-  };
-}
-
-function projectToWire(project: HexenProject): WireHexenProject {
-  return {
-    schemaVersion: project.schemaVersion,
-    title: project.title,
-    defaultLocation: project.defaultLocation,
-    content: projectContentToWire(project.content),
-    locations: project.locations.map(locationToWire),
-  };
-}
-
-export function openedProjectDataToWire(data: OpenedProjectData): WireOpenedProjectData {
-  return {
-    project: projectToWire(data.project),
-    warnings: data.warnings,
-    resolvedContent: data.resolvedContent,
-    resolveErrors: data.resolveErrors,
-  };
-}
-
 export function commandToWire(command: Command): object {
   switch (command.type) {
     case "saveLink":
@@ -182,44 +141,4 @@ export function commandToWire(command: Command): object {
     case "setFogCells":
       return { setFogCells: { locationId: command.locationId, cells: command.cells, revealed: command.revealed } };
   }
-}
-
-/** The receiving side of a Command wire object — used by a server parsing an incoming ClientMessage. Returns null for a shape it doesn't recognize. */
-export function commandFromWire(wire: Record<string, any>): Command | null {
-  if (wire.saveLink) {
-    const c = wire.saveLink;
-    return { type: "saveLink", locationId: c.locationId, linkId: c.linkId, patch: c.patch ?? {} };
-  }
-  if (wire.saveLocationContent) {
-    const c = wire.saveLocationContent;
-    return { type: "saveLocationContent", locationId: c.locationId, patch: c.patch ?? {} };
-  }
-  if (wire.addLocationLink) {
-    const c = wire.addLocationLink;
-    return {
-      type: "addLocationLink",
-      parentLocationId: c.parentLocationId,
-      targetLocationId: c.targetLocationId,
-      x: c.x,
-      y: c.y,
-      linkType: c.linkType,
-    };
-  }
-  if (wire.saveGrid) {
-    const c = wire.saveGrid;
-    return { type: "saveGrid", locationId: c.locationId, grid: gridFromWire(c.grid) };
-  }
-  if (wire.saveImage) {
-    const c = wire.saveImage;
-    return { type: "saveImage", locationId: c.locationId, image: c.image ?? null };
-  }
-  if (wire.setFog) {
-    const c = wire.setFog;
-    return { type: "setFog", locationId: c.locationId, fog: c.fog ?? null };
-  }
-  if (wire.setFogCells) {
-    const c = wire.setFogCells;
-    return { type: "setFogCells", locationId: c.locationId, cells: c.cells ?? [], revealed: c.revealed };
-  }
-  return null;
 }

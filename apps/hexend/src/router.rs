@@ -1,7 +1,6 @@
 //! One-shot filesystem operations that don't have "current state" to
 //! be authoritative over — everything that touches a project's live
 //! state goes through the /ws session instead (see session.rs).
-//! Port of apps/hexend/src/router.ts.
 
 use std::path::Path;
 

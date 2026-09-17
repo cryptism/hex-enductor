@@ -1,6 +1,5 @@
 //! Live per-project state: the WS session's command log, undo/redo
-//! cursor, and broadcast to every connected client. Port of
-//! apps/hexend/src/session.ts.
+//! cursor, and broadcast to every connected client.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

@@ -7,7 +7,7 @@
     "apps/*"
   ],
   "scripts": {
-    "dev:hexend": "bun run --cwd apps/hexend dev",
+    "dev:hexend": "cargo run --manifest-path apps/hexend/Cargo.toml",
     "dev:editor": "bun run --cwd apps/editor dev",
     "dev:presentation": "bun run --cwd apps/presentation dev",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit",

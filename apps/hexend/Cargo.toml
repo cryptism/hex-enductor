@@ -1,11 +1,11 @@
 [package]
-name = "hexend-rs"
+name = "hexend"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
 [[bin]]
-name = "hexend-rs"
+name = "hexend"
 path = "src/main.rs"
 
 [build-dependencies]

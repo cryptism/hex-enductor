@@ -13,7 +13,7 @@
       # stays available for whatever ends up running in production
       # (docs/PLAN.md §9/§7) without needing a second shell.
       #
-      # rustc/cargo back apps/hexend-rs; protobuf (protoc) + buf drive
+      # rustc/cargo back apps/hexend; protobuf (protoc) + buf drive
       # codegen from schema/hexen/v1/*.proto into both that crate and
       # packages/hexen-proto-ts.
       devShells.${system}.default = pkgs.mkShell {
