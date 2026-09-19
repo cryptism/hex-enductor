@@ -97,6 +97,7 @@ function App() {
       });
     return () => {
       cancelled = true;
+      storage.close();
     };
   }, [storage]);
 

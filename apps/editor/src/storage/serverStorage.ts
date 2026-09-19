@@ -17,6 +17,16 @@ function extensionFor(file: File): string | null {
 /** Wraps hexend's live /ws session — the storage backend the app has had all along, just server-authoritative now. */
 export function createServerStorage(path: string): ProjectStorage {
   let session: LiveSession | null = null;
+  // Bumped by close() to invalidate whichever open() call is currently
+  // in flight — without this, React 19 StrictMode's dev-only double-
+  // invoke of an effect (open, cleanup, open again, all before the
+  // first connect even resolves) leaks the first call's socket: it
+  // finishes connecting after its own effect already "cleaned up", so
+  // nothing else was ever going to close it. Every subsequent broadcast
+  // then arrives twice — once per live socket — since hexend fans a
+  // command's result out to every socket on the session, including a
+  // reconnect the app itself has already forgotten about.
+  let openToken = 0;
   // Registered before open() necessarily resolves — App.tsx's own
   // "open" and "subscribe" effects both fire in the same commit, with
   // no guarantee of which runs first, so subscribe can't require a
@@ -30,7 +40,15 @@ export function createServerStorage(path: string): ProjectStorage {
     label: path,
 
     async open() {
-      session = await connectLiveSession(serverUrl(), path);
+      const myToken = ++openToken;
+      const opened = await connectLiveSession(serverUrl(), path);
+      if (myToken !== openToken) {
+        // Superseded by a close() (or another open()) while connecting — this
+        // connection was never going to be used, so don't leave it dangling.
+        opened.close();
+        throw new Error("Storage was closed before this connection finished opening");
+      }
+      session = opened;
       session.subscribe((data) => {
         for (const listener of listeners) listener(data);
       });
@@ -41,6 +59,12 @@ export function createServerStorage(path: string): ProjectStorage {
         for (const listener of followViewListeners) listener(view);
       });
       return session.initial;
+    },
+
+    close() {
+      openToken++;
+      session?.close();
+      session = null;
     },
 
     subscribe(onUpdate) {

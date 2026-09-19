@@ -138,6 +138,10 @@ export function createLocalFsStorage(dirHandle: FileSystemDirectoryHandle): Proj
     label: dirHandle.name,
     open,
 
+    // No live connection to tear down — every read/write is one-shot
+    // File System Access API calls, nothing left running between them.
+    close() {},
+
     subscribe(onUpdate) {
       listeners.add(onUpdate);
       return () => listeners.delete(onUpdate);

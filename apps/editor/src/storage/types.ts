@@ -17,6 +17,8 @@ export interface ProjectStorage {
   /** Shown in the UI — the server path, or the chosen folder's name. */
   readonly label: string;
   open(): Promise<OpenedProjectData>;
+  /** Tears down whatever `open()` set up (a live session's socket, for ServerStorage) — call on unmount/re-open, notably in React 19 StrictMode's dev-only double-invoke of an effect, or `open()`'s own connection leaks. A no-op where there's nothing to tear down (LocalFsStorage). */
+  close(): void;
   subscribe(onUpdate: (data: OpenedProjectData) => void): () => void;
   execute(command: Command): void;
   /** Purely ephemeral — never touches project state. A no-op on backends with no live session to broadcast over (local-fs). */
