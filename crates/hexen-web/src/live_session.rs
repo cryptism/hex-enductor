@@ -91,11 +91,22 @@ pub fn connect(
 
     let on_failure = {
         let server_url = server_url.to_owned();
+        let errored = std::cell::Cell::new(false);
         Closure::<dyn FnMut(web_sys::Event)>::new(move |evt: web_sys::Event| {
+            // A failed connection fires "error" and then "close"; only the
+            // close carries hexend's reason (no such project, a parse
+            // error, not open for viewers), so report on the close.
+            let Some(close) = evt.dyn_ref::<web_sys::CloseEvent>() else {
+                errored.set(true);
+                return;
+            };
             if opened.replace(true) {
                 return;
             }
-            on_error(if evt.type_() == "error" {
+            let reason = close.reason();
+            on_error(if !reason.is_empty() {
+                reason
+            } else if errored.get() {
                 format!("Couldn't connect to {server_url}")
             } else {
                 format!("Connection to {server_url} closed before it opened")

@@ -9,6 +9,7 @@ use leptos::task::spawn_local;
 use serde::Deserialize;
 
 use crate::app::use_app;
+use crate::desktop::{is_desktop, pick_project_file};
 use crate::http::{encode, fetch_text, server_url};
 use crate::recents::{add_local_recent, local_recents, recent_projects, LocalRecent};
 use crate::storage::{request_readwrite, show_directory_picker, supports_local_fs};
@@ -222,7 +223,11 @@ pub fn ProjectPicker(
     let local_error = RwSignal::new(None::<String>);
     let creating_project = RwSignal::new(false);
     let create_error = RwSignal::new(None::<String>);
-    let local_fs = supports_local_fs();
+    // The desktop app opens projects through its own server via the
+    // native file dialog; the browser-folder backend is for the web
+    // build (and not every system webview supports it anyway).
+    let desktop = is_desktop();
+    let local_fs = !desktop && supports_local_fs();
 
     if local_fs {
         spawn_local(async move { local_recent.set(local_recents().await) });
@@ -286,6 +291,17 @@ pub fn ProjectPicker(
         });
     };
 
+    let open_file_dialog = move |_| {
+        local_error.set(None);
+        spawn_local(async move {
+            match pick_project_file().await {
+                Ok(Some(path)) => open_and_close.run(path),
+                Ok(None) => {}
+                Err(err) => local_error.set(Some(err)),
+            }
+        });
+    };
+
     let open_local_recent = move |entry: LocalRecent| {
         local_error.set(None);
         spawn_local(async move {
@@ -315,7 +331,14 @@ pub fn ProjectPicker(
                     }
                 })}
 
-            {if local_fs {
+            {if desktop {
+                view! {
+                    <button type="button" class="tool-button" on:click=open_file_dialog>
+                        "Open a project file…"
+                    </button>
+                }
+                    .into_any()
+            } else if local_fs {
                 view! {
                     <button type="button" class="tool-button" on:click=open_from_browser>
                         "Open from this browser…"
@@ -359,7 +382,13 @@ pub fn ProjectPicker(
                 </div>
             </Show>
 
-            <p>"Or, open a .hexen.yml project on a locally-running server, by its absolute path."</p>
+            <p>
+                {if desktop {
+                    "Or open one by its absolute path."
+                } else {
+                    "Or, open a .hexen.yml project on a locally-running server, by its absolute path."
+                }}
+            </p>
             <form on:submit=move |e| {
                 e.prevent_default();
                 let path = path_input.get().trim().to_string();

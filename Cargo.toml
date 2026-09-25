@@ -4,8 +4,22 @@
 [workspace]
 resolver = "2"
 members = [
-    "apps/hexend",
+    "apps/desktop",
     "apps/editor-rs",
+    "apps/hexend",
+    "apps/presentation-rs",
+    "crates/hexen-proto",
+    "crates/hexen-web",
+    "crates/map-core",
+    "crates/project-ops",
+]
+# apps/desktop needs WebKitGTK and both front ends already built, so a
+# plain `cargo build`/`cargo test` at the root leaves it out; build it
+# explicitly (`cargo build -p hex-enductor-desktop`, or `cargo tauri build`
+# in apps/desktop for installable bundles).
+default-members = [
+    "apps/editor-rs",
+    "apps/hexend",
     "apps/presentation-rs",
     "crates/hexen-proto",
     "crates/hexen-web",

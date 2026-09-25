@@ -12,6 +12,7 @@
     "dev:editor-rs": "trunk serve --config apps/editor-rs/Trunk.toml",
     "dev:presentation": "bun run --cwd apps/presentation dev",
     "dev:presentation-rs": "trunk serve --config apps/presentation-rs/Trunk.toml",
+    "build:desktop": "cd apps/desktop && cargo tauri build",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit",
     "test": "bun run --filter '*' test && bun test scripts",
     "schema:docs": "bun run --cwd packages/hexen-schema docs",

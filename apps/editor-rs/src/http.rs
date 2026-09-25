@@ -7,9 +7,16 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, Response};
 
-/// Where hexend is. Baked in at build time: `HEXEND_URL=... trunk build`.
-pub fn server_url() -> &'static str {
-    option_env!("HEXEND_URL").unwrap_or("http://localhost:4000")
+/// Where hexend is: the desktop app's own server when running inside
+/// it, otherwise baked in at build time (`HEXEND_URL=... trunk build`).
+pub fn server_url() -> String {
+    crate::desktop::desktop_info()
+        .map(|info| info.server_url)
+        .unwrap_or_else(|| {
+            option_env!("HEXEND_URL")
+                .unwrap_or("http://localhost:4000")
+                .to_string()
+        })
 }
 
 pub fn encode(s: &str) -> String {

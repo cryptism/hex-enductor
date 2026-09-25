@@ -25,7 +25,8 @@ use crate::pathutil::{resolve, resolve_cwd};
 use crate::pb::hexen::v1::{client_message, ClientMessage, ServerMessage};
 use crate::router::{create_project, list_directory};
 use crate::session::{
-    add_socket, apply_and_broadcast, get_or_create_session, redo, remove_socket, session_state, undo, Sessions,
+    add_socket, apply_and_broadcast, get_or_create_session, get_session, open_project_dirs, redo, remove_socket,
+    session_state, undo, Sessions,
 };
 
 #[derive(Clone)]
@@ -44,6 +45,21 @@ pub fn app(sessions: Sessions) -> Router {
         .with_state(AppState { sessions })
 }
 
+/// The read-only surface for other devices (a player-facing screen on
+/// the LAN): no directory listing, no project creation, no uploads, a
+/// /ws that only attaches to projects already open through [`app`] and
+/// ignores anything a client sends, and images only from those
+/// projects' directories. Shares `sessions` with the full app, so
+/// viewers see every change live. Callers add their own static files
+/// (e.g. the presentation app) on top.
+pub fn viewer_app(sessions: Sessions) -> Router {
+    Router::new()
+        .route("/image", get(viewer_get_image))
+        .route("/ws", get(viewer_ws_handler))
+        .layer(CorsLayer::permissive())
+        .with_state(AppState { sessions })
+}
+
 async fn root() -> &'static str {
     "hexend is awake, and watching your maps."
 }
@@ -53,11 +69,27 @@ struct WsQuery {
     path: Option<String>,
 }
 
-async fn ws_handler(Query(query): Query<WsQuery>, State(state): State<AppState>, ws: WebSocketUpgrade) -> Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, query.path, state))
+#[derive(Clone, Copy, PartialEq)]
+enum Access {
+    /// Opens the project if needed, applies commands.
+    Full,
+    /// Only attaches to an open project; incoming messages are dropped.
+    ReadOnly,
 }
 
-async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppState) {
+async fn ws_handler(Query(query): Query<WsQuery>, State(state): State<AppState>, ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(move |socket| handle_socket(socket, query.path, state, Access::Full))
+}
+
+async fn viewer_ws_handler(
+    Query(query): Query<WsQuery>,
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    ws.on_upgrade(move |socket| handle_socket(socket, query.path, state, Access::ReadOnly))
+}
+
+async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppState, access: Access) {
     let Some(path) = path else {
         let _ = socket
             .send(Message::Close(Some(CloseFrame {
@@ -68,13 +100,19 @@ async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppSt
         return;
     };
 
-    let session = match get_or_create_session(&state.sessions, &path).await {
+    let session = match access {
+        Access::Full => get_or_create_session(&state.sessions, &path).await.map_err(|e| e.to_string()),
+        Access::ReadOnly => get_session(&state.sessions, &path)
+            .await
+            .ok_or_else(|| "That project isn't open on this server".to_string()),
+    };
+    let session = match session {
         Ok(session) => session,
         Err(err) => {
             let _ = socket
                 .send(Message::Close(Some(CloseFrame {
                     code: 1011,
-                    reason: err.to_string().into(),
+                    reason: err.into(),
                 })))
                 .await;
             return;
@@ -112,6 +150,9 @@ async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppSt
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = stream.next().await {
             let Message::Text(text) = msg else { continue };
+            if access == Access::ReadOnly {
+                continue;
+            }
             let Ok(client_message) = serde_json::from_str::<ClientMessage>(&text) else {
                 continue;
             };
@@ -188,6 +229,19 @@ async fn get_image(Query(q): Query<ImageGetQuery>) -> Response {
         Ok(bytes) => ([(header::CONTENT_TYPE, mime_for(&target))], bytes).into_response(),
         Err(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
     }
+}
+
+/// [`get_image`] for the viewer surface: only from the directory of a
+/// project that's currently open.
+async fn viewer_get_image(State(state): State<AppState>, query: Query<ImageGetQuery>) -> Response {
+    let Some(dir) = &query.dir else {
+        return (StatusCode::BAD_REQUEST, "Missing dir query param").into_response();
+    };
+    let dir = resolve_cwd(Path::new(dir));
+    if !open_project_dirs(&state.sessions).await.contains(&dir) {
+        return (StatusCode::NOT_FOUND, "Not found").into_response();
+    }
+    get_image(query).await
 }
 
 // A location's base map image: the client posts raw bytes for a given

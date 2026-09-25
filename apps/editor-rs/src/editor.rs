@@ -18,12 +18,14 @@ use map_core::link_icons::find_link_icon;
 
 use crate::about::AboutModal;
 use crate::app::use_app;
+use crate::desktop::is_desktop;
 use crate::fog_controls::FogControls;
 use crate::forms::{AddLocationForm, ConfigureGridForm, LinkForm, LocationContentForm};
 use crate::location_browser::LocationBrowser;
 use crate::logo::{LoadingScreen, Logo};
 use crate::picker::ProjectPicker;
-use crate::storage::{ImageUrl, Storage};
+use crate::server_panel::ServerPanel;
+use crate::storage::{ImageUrl, Source, Storage};
 
 fn icon_swatch(slug: Option<&str>) -> Option<impl IntoView> {
     find_link_icon(slug).map(|icon| view! { <span class="icon-swatch" inner_html=icon.svg></span> })
@@ -211,6 +213,11 @@ pub fn Editor() -> impl IntoView {
     };
 
     let picker_open = RwSignal::new(false);
+    let server_open = RwSignal::new(false);
+    let project_path = match &source {
+        Source::Server(path) => Some(path.clone()),
+        Source::Folder(_) => None,
+    };
     let about_open = RwSignal::new(false);
     let browser_open = RwSignal::new(false);
 
@@ -449,6 +456,14 @@ pub fn Editor() -> impl IntoView {
             <button type="button" class="link-button sidebar-spaced" on:click=move |_| browser_open.set(true)>
                 "Browse all locations…"
             </button>
+            {is_desktop()
+                .then(|| {
+                    view! {
+                        <button type="button" class="link-button sidebar-spaced" on:click=move |_| server_open.set(true)>
+                            "Server & presentation…"
+                        </button>
+                    }
+                })}
 
             <label class="mode-toggle">
                 <input
@@ -765,6 +780,9 @@ pub fn Editor() -> impl IntoView {
         {ready}
         <Show when=move || about_open.get()>
             <AboutModal on_close=Callback::new(move |_| about_open.set(false)) />
+        </Show>
+        <Show when=move || server_open.get()>
+            <ServerPanel project_path=project_path.clone() on_close=Callback::new(move |_| server_open.set(false)) />
         </Show>
         <Show when=move || picker_open.get()>
             <div class="modal-backdrop">

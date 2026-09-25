@@ -76,6 +76,49 @@ front ends now have Rust versions. Workspace members:
 - `apps/presentation` and `apps/editor` (TS) still exist until the Rust
   versions are signed off; then delete them, and `packages/*` with them.
 
+## Desktop app: `apps/desktop` (Tauri 2)
+
+One binary: the editor in a native window, hexend **in-process** (it's
+a library — no sidecars), and the presentation app served to extra
+windows and, opt-in, the LAN.
+
+- `src/servers.rs` is the substance (natively tested):
+  - local server: `hexend::server::app` on **127.0.0.1**, random port,
+    for the editor + local presentation windows;
+  - LAN server (off by default, toggled from the editor): hexend's
+    `viewer_app` on 0.0.0.0, port 4747 if free — read-only /ws that
+    only attaches to projects already open locally, images only from
+    those projects' dirs, no /directory, /project or uploads.
+  - both serve presentation-rs (built with `--public-url
+    /presentation/` into `apps/desktop/presentation-dist/`, embedded
+    via rust-embed) under `/presentation/`.
+- `src/lib.rs`: Tauri wiring. The editor window gets
+  `window.__HEXEN_DESKTOP__ = { serverUrl, lanUrl, version }` via an
+  initialization script — **that global is the feature flag**
+  (`apps/editor-rs/src/desktop.rs`): with it, the editor talks to the
+  embedded server, the picker offers the native file dialog instead of
+  the browser-folder backend, and the sidebar gets "Server &
+  presentation…". Same editor build works in a browser without it.
+  Commands: `server_info`, `set_lan_sharing`, `open_presentation_window`,
+  `pick_project_file`. Only the `main` window has IPC capabilities;
+  presentation windows are plain http:// pages.
+- Not in the workspace's `default-members` (needs WebKitGTK and the
+  front-end builds), so root `cargo test` skips it; test it with
+  `cargo test -p hex-enductor-desktop`.
+- Build: `cd apps/desktop && cargo tauri build` (its beforeBuildCommand
+  runs both trunk builds; `--no-bundle` for just the binary, `--bundles
+  deb` etc. for packages). The binary is `target/{debug,release}/hex-enductor`.
+- Headless checks in a container: `Xvfb :99`, run the binary under
+  `dbus-launch` with `WEBKIT_DISABLE_COMPOSITING_MODE=1`, drive it with
+  `xdotool`, screenshot with ImageMagick's `import -window root`.
+
+**hexend's standalone binary still binds 0.0.0.0 with no auth**, and
+its `GET /image` takes `dir` from the caller (so it can read any file
+the process can) — pre-existing, not changed here; the desktop app
+avoids it by keeping the full API on loopback. Worth fixing in the
+standalone server too (bind 127.0.0.1 by default, or restrict `dir`
+to open projects like `viewer_app` does).
+
 Browser-testing the folder backend: Playwright can't drive the native
 picker, so seed OPFS (`navigator.storage.getDirectory()`) and stub
 `window.showDirectoryPicker` to return that directory via
@@ -156,6 +199,7 @@ nix develop --command bash -c 'bun run --cwd apps/editor dev'        # vite pick
 nix develop --command bash -c 'bun run --cwd apps/presentation dev'  # same
 nix develop --command bash -c 'cd apps/presentation-rs && trunk serve' # :5175
 nix develop --command bash -c 'cd apps/editor-rs && trunk serve'       # :5176
+nix develop --command bash -c 'cd apps/desktop && cargo tauri build --no-bundle && ../../target/release/hex-enductor'
 ```
 
 Editor: open the picker, paste the absolute path to a `.hexen.yml`
@@ -204,7 +248,8 @@ read-only, driven by whatever the editor does.
 
 ```
 nix develop --command bash -c 'bun run --filter "*" test'   # every TS workspace
-nix develop --command bash -c 'cargo test'                   # whole Cargo workspace
+nix develop --command bash -c 'cargo test'                   # Cargo workspace (minus desktop)
+nix develop --command bash -c 'cargo test -p hex-enductor-desktop'  # needs presentation-dist built
 nix develop --command bash -c 'cargo clippy -p presentation-rs -p editor-rs --target wasm32-unknown-unknown'
 nix develop --command bash -c 'bun run typecheck'
 ```

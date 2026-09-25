@@ -37,6 +37,29 @@ pub fn new_sessions() -> Sessions {
     Arc::new(Mutex::new(HashMap::new()))
 }
 
+/// An already-open session, if any — never opens a file. What the
+/// read-only viewer surface uses, so a LAN client can only watch
+/// projects someone on the full API has opened.
+pub async fn get_session(sessions: &Sessions, path: &str) -> Option<SessionHandle> {
+    sessions.lock().await.get(path).cloned()
+}
+
+/// The directories of every open project — the only places the viewer
+/// surface serves images from.
+pub async fn open_project_dirs(sessions: &Sessions) -> Vec<PathBuf> {
+    sessions
+        .lock()
+        .await
+        .keys()
+        .map(|path| {
+            crate::pathutil::resolve_cwd(Path::new(path))
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
 pub async fn get_or_create_session(sessions: &Sessions, path: &str) -> Result<SessionHandle, OpenError> {
     {
         let map = sessions.lock().await;

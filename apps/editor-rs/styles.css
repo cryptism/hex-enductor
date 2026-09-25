@@ -809,3 +809,26 @@ h2 {
   gap: 0.5rem;
   font-size: 0.9em;
 }
+
+/* The desktop app's Server panel (src/server_panel.rs). */
+
+.server-panel section {
+  margin-top: 1rem;
+}
+
+.server-panel code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.server-link {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.server-link input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}

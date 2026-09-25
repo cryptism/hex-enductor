@@ -17,7 +17,7 @@ pub struct ServerStorage {
 impl ServerStorage {
     pub fn connect(path: &str, on_update: OnUpdate, on_error: OnError) -> Rc<Self> {
         let session =
-            match live_session::connect(server_url(), path, move |data| on_update(data), {
+            match live_session::connect(&server_url(), path, move |data| on_update(data), {
                 let on_error = on_error.clone();
                 move |err| on_error(err)
             }) {

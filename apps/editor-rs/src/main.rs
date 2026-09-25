@@ -1,5 +1,6 @@
 mod about;
 mod app;
+mod desktop;
 mod editor;
 mod fog_controls;
 mod forms;
@@ -8,6 +9,7 @@ mod location_browser;
 mod logo;
 mod picker;
 mod recents;
+mod server_panel;
 mod storage;
 mod ui_state;
 
