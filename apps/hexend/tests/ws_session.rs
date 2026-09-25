@@ -246,3 +246,46 @@ async fn reqwest_lite(url: &str) -> u16 {
     response.push_str(&String::from_utf8_lossy(&buf[..n]));
     response.split_whitespace().nth(1).unwrap().parse().unwrap()
 }
+
+/// Status code of a raw HTTP request with an optional body.
+async fn http_status(port: u16, method: &str, path: &str, body: &[u8]) -> u16 {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let head = format!(
+        "{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes()).await.unwrap();
+    stream.write_all(body).await.unwrap();
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).await.unwrap();
+    String::from_utf8_lossy(&response).split_whitespace().nth(1).unwrap().parse().unwrap()
+}
+
+#[tokio::test]
+async fn image_reads_and_uploads_are_limited_to_open_projects() {
+    let port = start_server().await;
+    let tmp = tempfile_project().await;
+    let dir = urlencoding_lite(tmp.parent().unwrap().to_str().unwrap());
+    let mut png = vec![0u8; 24];
+    png[12..16].copy_from_slice(b"IHDR");
+    png[16..20].copy_from_slice(&4u32.to_be_bytes());
+    png[20..24].copy_from_slice(&3u32.to_be_bytes());
+
+    // Nothing open yet: neither an arbitrary directory nor the project's own.
+    assert_eq!(http_status(port, "GET", "/image?dir=%2Fetc&file=hostname", b"").await, 404);
+    assert_eq!(http_status(port, "GET", &format!("/image?dir={dir}&file=demo.hexen.yml"), b"").await, 404);
+    let upload = format!("/image?dir={dir}&locationId=town&ext=png");
+    assert_eq!(http_status(port, "POST", &upload, &png).await, 404);
+
+    // Open it over /ws, as the editor does before touching images.
+    let url = format!("ws://127.0.0.1:{port}/ws?path={}", urlencoding_lite(tmp.to_str().unwrap()));
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.expect("connect");
+    ws.next().await.expect("initial").expect("ok");
+
+    assert_eq!(http_status(port, "GET", &format!("/image?dir={dir}&file=demo.hexen.yml"), b"").await, 200);
+    assert_eq!(http_status(port, "GET", &format!("/image?dir={dir}&file=..%2F..%2Fetc%2Fhostname"), b"").await, 400);
+    assert_eq!(http_status(port, "GET", "/image?dir=%2Fetc&file=hostname", b"").await, 404);
+    assert_eq!(http_status(port, "POST", &upload, &png).await, 200);
+    assert!(tmp.parent().unwrap().join("_assets/town.png").exists());
+}

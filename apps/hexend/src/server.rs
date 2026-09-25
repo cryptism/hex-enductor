@@ -46,15 +46,15 @@ pub fn app(sessions: Sessions) -> Router {
 }
 
 /// The read-only surface for other devices (a player-facing screen on
-/// the LAN): no directory listing, no project creation, no uploads, a
-/// /ws that only attaches to projects already open through [`app`] and
-/// ignores anything a client sends, and images only from those
-/// projects' directories. Shares `sessions` with the full app, so
+/// the LAN): no directory listing, no project creation, no uploads, and
+/// a /ws that only attaches to projects already open through [`app`]
+/// and ignores anything a client sends. Images, as on [`app`], only
+/// from open projects' directories. Shares `sessions` with the full app, so
 /// viewers see every change live. Callers add their own static files
 /// (e.g. the presentation app) on top.
 pub fn viewer_app(sessions: Sessions) -> Router {
     Router::new()
-        .route("/image", get(viewer_get_image))
+        .route("/image", get(get_image))
         .route("/ws", get(viewer_ws_handler))
         .layer(CorsLayer::permissive())
         .with_state(AppState { sessions })
@@ -206,20 +206,28 @@ fn sanitize_filename(id: &str) -> String {
         .collect()
 }
 
-// No auth for v1 (local/LAN trust), but a file server still shouldn't
-// let a caller walk out of the project directory it was handed.
+// No auth, so image reads and uploads are limited to the directories
+// of projects that are open in a session: a caller can't point `dir`
+// at an arbitrary folder, and `file` can't walk back out of it.
 #[derive(Deserialize)]
 struct ImageGetQuery {
     dir: Option<String>,
     file: Option<String>,
 }
 
-async fn get_image(Query(q): Query<ImageGetQuery>) -> Response {
+/// `dir` resolved, if it's the directory of an open project.
+async fn open_project_dir(sessions: &Sessions, dir: &str) -> Option<std::path::PathBuf> {
+    let dir = resolve_cwd(Path::new(dir));
+    open_project_dirs(sessions).await.contains(&dir).then_some(dir)
+}
+
+async fn get_image(State(state): State<AppState>, Query(q): Query<ImageGetQuery>) -> Response {
     let (Some(dir), Some(file)) = (q.dir, q.file) else {
         return (StatusCode::BAD_REQUEST, "Missing dir or file query param").into_response();
     };
-
-    let base = resolve_cwd(Path::new(&dir));
+    let Some(base) = open_project_dir(&state.sessions, &dir).await else {
+        return (StatusCode::NOT_FOUND, "Not found").into_response();
+    };
     let target = resolve(&base, Path::new(&file));
     if !target.starts_with(&base) {
         return (StatusCode::BAD_REQUEST, "file escapes the project directory").into_response();
@@ -229,19 +237,6 @@ async fn get_image(Query(q): Query<ImageGetQuery>) -> Response {
         Ok(bytes) => ([(header::CONTENT_TYPE, mime_for(&target))], bytes).into_response(),
         Err(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
     }
-}
-
-/// [`get_image`] for the viewer surface: only from the directory of a
-/// project that's currently open.
-async fn viewer_get_image(State(state): State<AppState>, query: Query<ImageGetQuery>) -> Response {
-    let Some(dir) = &query.dir else {
-        return (StatusCode::BAD_REQUEST, "Missing dir query param").into_response();
-    };
-    let dir = resolve_cwd(Path::new(dir));
-    if !open_project_dirs(&state.sessions).await.contains(&dir) {
-        return (StatusCode::NOT_FOUND, "Not found").into_response();
-    }
-    get_image(query).await
 }
 
 // A location's base map image: the client posts raw bytes for a given
@@ -257,7 +252,11 @@ struct ImagePostQuery {
     ext: String,
 }
 
-async fn post_image(Query(q): Query<ImagePostQuery>, body: axum::body::Bytes) -> Response {
+async fn post_image(
+    State(state): State<AppState>,
+    Query(q): Query<ImagePostQuery>,
+    body: axum::body::Bytes,
+) -> Response {
     let Some(ext) = upload_ext(&q.ext.to_lowercase()) else {
         return (
             StatusCode::BAD_REQUEST,
@@ -266,8 +265,11 @@ async fn post_image(Query(q): Query<ImagePostQuery>, body: axum::body::Bytes) ->
             .into_response();
     };
 
+    let Some(project_dir) = open_project_dir(&state.sessions, &q.dir).await else {
+        return (StatusCode::NOT_FOUND, "No open project in that directory").into_response();
+    };
     let safe_name = format!("{}.{ext}", sanitize_filename(&q.location_id));
-    let assets_dir = resolve_cwd(Path::new(&q.dir)).join("_assets");
+    let assets_dir = project_dir.join("_assets");
     let target = assets_dir.join(&safe_name);
     if !target.starts_with(&assets_dir) {
         return (StatusCode::BAD_REQUEST, "file escapes the project directory").into_response();
