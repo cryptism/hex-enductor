@@ -8,4 +8,5 @@ members = [
     "apps/presentation-rs",
     "crates/hexen-proto",
     "crates/map-core",
+    "crates/project-ops",
 ]

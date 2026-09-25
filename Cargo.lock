@@ -678,6 +678,7 @@ dependencies = [
  "futures-util",
  "hexen-proto",
  "path-clean",
+ "project-ops",
  "serde",
  "serde_json",
  "serde_yml",
@@ -1530,6 +1531,16 @@ dependencies = [
  "syn 2.0.119",
  "version_check",
  "yansi",
+]
+
+[[package]]
+name = "project-ops"
+version = "0.0.0"
+dependencies = [
+ "hexen-proto",
+ "serde_yml",
+ "thiserror 2.0.20",
+ "uuid",
 ]
 
 [[package]]

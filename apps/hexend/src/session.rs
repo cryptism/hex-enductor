@@ -9,18 +9,13 @@ use std::sync::Arc;
 use axum::extract::ws::Message;
 use tokio::sync::{mpsc, Mutex};
 
-use crate::commands::apply_command;
 use crate::mutations::MutationError;
+use project_ops::history::History;
 use crate::pb::hexen::v1::{location_content, Command, HexenProject, OpenedProjectData, ResolvedContent, ServerMessage};
 use crate::project_io::{open_project, save_project, OpenError};
 use crate::resolver::resolve_inline_content;
 
 static NEXT_SOCKET_ID: AtomicU64 = AtomicU64::new(0);
-
-pub struct LogEntry {
-    pub command: Command,
-    pub snapshot: HexenProject,
-}
 
 /// Sessions live for the server process's lifetime, keyed by absolute
 /// project path — no eviction. Fine at single-user/dev-server scale.
@@ -31,11 +26,8 @@ pub struct ProjectSession {
     pub resolve_errors: HashMap<String, String>,
     pub warnings: Vec<String>,
     pub sockets: HashMap<u64, mpsc::UnboundedSender<Message>>,
-    /// Command history with a cursor into it — undo/redo just move the cursor.
-    pub log: Vec<LogEntry>,
-    pub cursor: i64,
-    /// The project as it stood before this session's first command — where undo bottoms out.
-    pub base_snapshot: HexenProject,
+    /// Undo/redo history, shared by every client on this project.
+    pub history: History,
 }
 
 pub type SessionHandle = Arc<Mutex<ProjectSession>>;
@@ -54,7 +46,7 @@ pub async fn get_or_create_session(sessions: &Sessions, path: &str) -> Result<Se
     }
 
     let opened = open_project(Path::new(path)).await?;
-    let base_snapshot = opened.project.clone();
+    let history = History::new(opened.project.clone());
     let session = Arc::new(Mutex::new(ProjectSession {
         path: PathBuf::from(path),
         project: opened.project,
@@ -62,9 +54,7 @@ pub async fn get_or_create_session(sessions: &Sessions, path: &str) -> Result<Se
         resolve_errors: opened.resolve_errors,
         warnings: opened.warnings,
         sockets: HashMap::new(),
-        log: Vec::new(),
-        cursor: -1,
-        base_snapshot,
+        history,
     }));
 
     let mut map = sessions.lock().await;
@@ -140,40 +130,19 @@ fn settle(session: &mut ProjectSession, project: HexenProject) {
 }
 
 pub fn apply_and_broadcast(session: &mut ProjectSession, command: Command) -> Result<(), MutationError> {
-    // A command issued after an undo discards whatever redo branch existed.
-    if session.cursor < session.log.len() as i64 - 1 {
-        session.log.truncate((session.cursor + 1) as usize);
-    }
-
-    let mut next = session.project.clone();
-    apply_command(&mut next, command.clone())?;
-    session.log.push(LogEntry {
-        command,
-        snapshot: next.clone(),
-    });
-    session.cursor += 1;
+    let next = session.history.execute(command)?.clone();
     settle(session, next);
     Ok(())
 }
 
 pub fn undo(session: &mut ProjectSession) {
-    if session.cursor < 0 {
-        return;
+    if let Some(snapshot) = session.history.undo().cloned() {
+        settle(session, snapshot);
     }
-    session.cursor -= 1;
-    let snapshot = if session.cursor == -1 {
-        session.base_snapshot.clone()
-    } else {
-        session.log[session.cursor as usize].snapshot.clone()
-    };
-    settle(session, snapshot);
 }
 
 pub fn redo(session: &mut ProjectSession) {
-    if session.cursor >= session.log.len() as i64 - 1 {
-        return;
+    if let Some(snapshot) = session.history.redo().cloned() {
+        settle(session, snapshot);
     }
-    session.cursor += 1;
-    let snapshot = session.log[session.cursor as usize].snapshot.clone();
-    settle(session, snapshot);
 }

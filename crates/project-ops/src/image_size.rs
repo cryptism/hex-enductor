@@ -50,14 +50,16 @@ fn read_jpeg_size(bytes: &[u8]) -> Option<ImageSize> {
             return None;
         }
         let length = u16::from_be_bytes(bytes[offset + 2..offset + 4].try_into().unwrap()) as usize;
-        let is_sof = (0xc0..=0xcf).contains(&marker) && marker != 0xc4 && marker != 0xc8 && marker != 0xcc;
+        let is_sof =
+            (0xc0..=0xcf).contains(&marker) && marker != 0xc4 && marker != 0xc8 && marker != 0xcc;
 
         if is_sof {
             if offset + 9 > bytes.len() {
                 return None;
             }
             return Some(ImageSize {
-                height: u16::from_be_bytes(bytes[offset + 5..offset + 7].try_into().unwrap()) as u32,
+                height: u16::from_be_bytes(bytes[offset + 5..offset + 7].try_into().unwrap())
+                    as u32,
                 width: u16::from_be_bytes(bytes[offset + 7..offset + 9].try_into().unwrap()) as u32,
             });
         }
@@ -69,4 +71,54 @@ fn read_jpeg_size(bytes: &[u8]) -> Option<ImageSize> {
 
 pub fn read_image_size(bytes: &[u8]) -> Option<ImageSize> {
     read_png_size(bytes).or_else(|| read_jpeg_size(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fake_png(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = vec![0u8; 24];
+        bytes[12..16].copy_from_slice(b"IHDR");
+        bytes[16..20].copy_from_slice(&width.to_be_bytes());
+        bytes[20..24].copy_from_slice(&height.to_be_bytes());
+        bytes
+    }
+
+    fn fake_jpeg(width: u16, height: u16) -> Vec<u8> {
+        let mut bytes = vec![0xff, 0xd8, 0xff, 0xc0, 0, 11, 8];
+        bytes.extend_from_slice(&height.to_be_bytes());
+        bytes.extend_from_slice(&width.to_be_bytes());
+        bytes.extend_from_slice(&[1, 1, 0x11, 0, 0xff, 0xd9]);
+        bytes
+    }
+
+    fn size(bytes: &[u8]) -> Option<(u32, u32)> {
+        read_image_size(bytes).map(|s| (s.width, s.height))
+    }
+
+    #[test]
+    fn reads_a_png_ihdr() {
+        assert_eq!(size(&fake_png(400, 300)), Some((400, 300)));
+    }
+
+    #[test]
+    fn reads_a_jpeg_sof0() {
+        assert_eq!(size(&fake_jpeg(640, 480)), Some((640, 480)));
+    }
+
+    #[test]
+    fn skips_a_leading_app0_segment() {
+        let jpeg = fake_jpeg(200, 100);
+        let mut with_app0 = jpeg[..2].to_vec();
+        with_app0.extend_from_slice(&[0xff, 0xe0, 0x00, 0x04, 0x00, 0x00]);
+        with_app0.extend_from_slice(&jpeg[2..]);
+        assert_eq!(size(&with_app0), Some((200, 100)));
+    }
+
+    #[test]
+    fn rejects_short_or_unknown_buffers() {
+        assert_eq!(size(&[0, 0, 0]), None);
+        assert_eq!(size(b"not an image, just text"), None);
+    }
 }

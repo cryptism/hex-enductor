@@ -1,0 +1,15 @@
+[package]
+name = "project-ops"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Everything about a .hexen.yml project that doesn't touch a disk or a socket — parse/serialize, the Command reducer, undo history, content parsing, image sizing. Shared by hexend (native) and the editor's local-folder storage (wasm32)."
+
+[dependencies]
+hexen-proto = { path = "../hexen-proto" }
+serde_yml = "0.0.12"
+thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1", features = ["v4", "js"] }
