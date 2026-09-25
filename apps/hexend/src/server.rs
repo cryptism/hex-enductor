@@ -10,7 +10,7 @@
 use std::path::Path;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
-use axum::extract::{Query, State, WebSocketUpgrade};
+use axum::extract::{DefaultBodyLimit, Query, State, WebSocketUpgrade};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
@@ -34,10 +34,20 @@ pub struct AppState {
     pub sessions: Sessions,
 }
 
+// Map images can comfortably exceed axum's 2MB default body-size cap;
+// this is the layer that was missing, causing "Payload too large" on
+// upload of any map bigger than that.
+const MAX_IMAGE_UPLOAD_BYTES: usize = 50 * 1024 * 1024;
+
 pub fn app(sessions: Sessions) -> Router {
     Router::new()
         .route("/", get(root))
-        .route("/image", get(get_image).post(post_image))
+        .route(
+            "/image",
+            get(get_image)
+                .post(post_image)
+                .layer(DefaultBodyLimit::max(MAX_IMAGE_UPLOAD_BYTES)),
+        )
         .route("/project", post(create_project))
         .route("/directory", get(list_directory))
         .route("/ws", get(ws_handler))

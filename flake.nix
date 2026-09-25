@@ -16,8 +16,18 @@
       # rustc/cargo back apps/hexend; protobuf (protoc) + buf drive
       # codegen from schema/hexen/v1/*.proto into both that crate and
       # packages/hexen-proto-ts.
+      #
+      # cargo-leptos backs the experimental apps/presentation-rs (Leptos
+      # SSR skeleton, see its own comments). Turns out this nixpkgs'
+      # pkgs.rustc already carries the wasm32-unknown-unknown std lib,
+      # so no rustup/rust-overlay needed for the target itself — it
+      # just needs `lld` as the linker for that target (cargo-leptos's
+      # client-side build fails with "linker `lld` not found" without
+      # it) and wasm-bindgen-cli, whose version must match the
+      # `wasm-bindgen` crate version pinned in
+      # apps/presentation-rs/Cargo.toml exactly.
       devShells.${system}.default = pkgs.mkShell {
-        buildInputs = [ pkgs.bun pkgs.nodejs_22 pkgs.rustc pkgs.cargo pkgs.protobuf pkgs.buf ];
+        buildInputs = [ pkgs.bun pkgs.nodejs_22 pkgs.rustc pkgs.cargo pkgs.protobuf pkgs.buf pkgs.cargo-leptos pkgs.lld pkgs.wasm-bindgen-cli ];
       };
     };
 }
