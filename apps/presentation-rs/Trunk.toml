@@ -1,0 +1,6 @@
+[build]
+target = "index.html"
+
+[serve]
+# apps/presentation (vite) keeps 5174 while both exist.
+port = 5175

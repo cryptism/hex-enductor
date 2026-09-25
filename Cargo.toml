@@ -1,0 +1,11 @@
+# The Rust side of the repo. Each member is also buildable on its own
+# (`cd apps/hexend && cargo test`), but they share one lockfile and one
+# target/ dir from here.
+[workspace]
+resolver = "2"
+members = [
+    "apps/hexend",
+    "apps/presentation-rs",
+    "crates/hexen-proto",
+    "crates/map-core",
+]

@@ -8,12 +8,12 @@ from-scratch Rust rewrite (axum), consolidated from a parallel
 TS server anymore — don't go looking for `apps/hexend/src/*.ts`.
 
 - Its message schema is defined in `schema/hexen/v1/*.proto`.
-  `apps/hexend/build.rs` codegens it into Rust: prost for the structs,
-  pbjson for protobuf's canonical JSON mapping (see "wire-format
-  gotcha" below).
-- Building/testing it requires `protoc`/`buf`, which only exist in the
-  nix devShell: run everything through
-  `nix develop --command bash -c '...'`, not directly.
+  `crates/hexen-proto` codegens it into Rust (prost for the structs,
+  pbjson for protobuf's canonical JSON mapping — see "wire-format
+  gotcha" below); hexend re-exports it as `crate::pb`. It compiles the
+  protos with protox (pure Rust), so **no `protoc` needed** to build.
+- Run things through `nix develop --command bash -c '...'` anyway —
+  that's where the wasm toolchain for `apps/presentation-rs` lives.
 - Listens on **port 4000** by default (`PORT` env var to override).
 - `bun run dev:hexend` from the repo root runs `cargo run
   --manifest-path apps/hexend/Cargo.toml` — it's a plain Cargo command
@@ -21,8 +21,42 @@ TS server anymore — don't go looking for `apps/hexend/src/*.ts`.
 - Not part of the bun workspace (`package.json`'s `workspaces` only
   globs `packages/*`/`apps/*` for *.json-having packages that bun
   resolves — a Cargo crate with no package.json is invisible to
-  `bun run --filter '*'`). `cd apps/hexend && cargo test`/`cargo build`
-  directly, inside `nix develop`.
+  `bun run --filter '*'`). It's a member of the root **Cargo
+  workspace** (`Cargo.toml`, one `Cargo.lock`, one `target/`) instead.
+
+## Rust front ends: moving off TypeScript
+
+The plan is to port the TS apps to Rust/Leptos one at a time,
+presentation first, then the editor. Workspace members:
+
+- `crates/hexen-proto` — generated schema types, shared by hexend
+  (native) and the wasm front ends. Rust clients deserialize hexend's
+  messages with the same pbjson types hexend serializes them with, so
+  **the `wireFormat.ts` seam doesn't exist on the Rust side**.
+- `crates/map-core` — framework-free port of `packages/map-core`: hex/
+  square grid geometry, fog cell addressing (keys must stay identical
+  to `fog.ts` while the TS editor still writes them), Perlin fog
+  texture, link icons, plus `viewport` (pan/zoom math). Natively
+  testable: `cargo test -p map-core`.
+- `apps/presentation-rs` — Leptos (CSR) port of `apps/presentation`,
+  built with trunk. **No Leaflet**: the map (`src/map_canvas.rs`) is
+  one SVG in image-pixel space (image, grid path, fog path) under a
+  `Viewport` transform, with HTML pins/popups over it and pan/wheel/
+  pinch done by hand with pointer events. Keep it that way for the
+  editor port too.
+  - `wasm-bindgen` is pinned `=0.2.127` to match nixpkgs'
+    `wasm-bindgen-cli_0_2_127` in the flake — trunk needs the two
+    identical, and trunk's own downloaded binary won't run on NixOS.
+    Bump both together.
+  - `apps/presentation` (TS) still exists until presentation-rs is
+    signed off; then delete it.
+
+**Latent TS bug the Rust port surfaced:** proto3 JSON omits
+zero-valued scalars (e.g. `b1: {x: 60}` with no `y`), and
+`wireFormat.ts` doesn't restore defaults, so `hexMath.ts` computes on
+`undefined` → NaN polygons → no grid at all in the TS presentation
+(and anywhere else a zero coordinate lands). Not fixed on the TS side;
+prost defaults make it a non-issue in Rust.
 
 ## Schema: still mid-migration to protobuf
 
@@ -87,11 +121,12 @@ flagged as a real follow-up. Fixing it properly means either migrating
 nix develop --command bash -c 'cd apps/hexend && cargo run'          # :4000
 nix develop --command bash -c 'bun run --cwd apps/editor dev'        # vite picks a free port
 nix develop --command bash -c 'bun run --cwd apps/presentation dev'  # same
+nix develop --command bash -c 'cd apps/presentation-rs && trunk serve' # :5175
 ```
 
 Editor: open the picker, paste the absolute path to a `.hexen.yml`
 (e.g. `examples/demo/demo.hexen.yml`) under "open a project on a
-locally-running server". Presentation: append
+locally-running server". Presentation (either one): append
 `?server=http://localhost:4000&path=<ABSOLUTE path>` to its URL — it's
 read-only, driven by whatever the editor does.
 
@@ -135,7 +170,8 @@ read-only, driven by whatever the editor does.
 
 ```
 nix develop --command bash -c 'bun run --filter "*" test'   # every TS workspace
-nix develop --command bash -c 'cd apps/hexend && cargo test'
+nix develop --command bash -c 'cargo test'                   # whole Cargo workspace
+nix develop --command bash -c 'cargo clippy -p presentation-rs --target wasm32-unknown-unknown'
 nix develop --command bash -c 'bun run typecheck'
 ```
 

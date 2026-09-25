@@ -10,6 +10,7 @@
     "dev:hexend": "cargo run --manifest-path apps/hexend/Cargo.toml",
     "dev:editor": "bun run --cwd apps/editor dev",
     "dev:presentation": "bun run --cwd apps/presentation dev",
+    "dev:presentation-rs": "trunk serve --config apps/presentation-rs/Trunk.toml",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit",
     "test": "bun run --filter '*' test && bun test scripts",
     "schema:docs": "bun run --cwd packages/hexen-schema docs",
