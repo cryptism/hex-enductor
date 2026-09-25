@@ -1,0 +1,9 @@
+[package]
+name = "map-core"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Framework-free map math shared by the Rust front ends: hex/square grid geometry, fog-of-war cell addressing, the fog noise texture, and the link icon set."
+
+[dependencies]
+hexen-proto = { path = "../hexen-proto" }

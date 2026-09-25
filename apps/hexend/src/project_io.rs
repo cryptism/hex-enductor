@@ -1,39 +1,15 @@
-//! YAML <-> HexenProject, plus the cross-reference warnings check.
-//! Port of packages/hexen-schema/src/index.ts.
+//! Opening and saving a project on disk. Parsing, serializing and the
+//! cross-reference check are crates/project-ops's `document`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 use thiserror::Error;
 
 use crate::pb::hexen::v1::{location_content, project_content, HexenProject, ResolvedContent};
-use crate::resolver::{resolve_inline_content, ObsidianResolver, ObsidianResolverConfig};
-
-pub struct ParsedHexenProject {
-    pub project: HexenProject,
-    pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Error)]
-pub enum ParseError {
-    #[error(transparent)]
-    Yaml(#[from] serde_yml::Error),
-    #[error("Unsupported schemaVersion {0} (expected 1)")]
-    UnsupportedSchemaVersion(i32),
-}
-
-pub fn parse_hexen_project(yaml_text: &str) -> Result<ParsedHexenProject, ParseError> {
-    let project: HexenProject = serde_yml::from_str(yaml_text)?;
-    if project.schema_version != 1 {
-        return Err(ParseError::UnsupportedSchemaVersion(project.schema_version));
-    }
-    let warnings = validate_references(&project);
-    Ok(ParsedHexenProject { project, warnings })
-}
-
-pub fn serialize_hexen_project(project: &HexenProject) -> Result<String, serde_yml::Error> {
-    serde_yml::to_string(project)
-}
+use crate::resolver::{ObsidianResolver, ObsidianResolverConfig};
+pub use project_ops::document::{parse_hexen_project, serialize_hexen_project, ParseError, ParsedHexenProject};
+use project_ops::content::{no_vault_error, resolve_inline_content};
 
 pub struct OpenedProject {
     pub project: HexenProject,
@@ -85,10 +61,7 @@ pub async fn open_project(path: &Path) -> Result<OpenedProject, OpenError> {
             Some(location_content::Kind::Inline(inline)) => Ok(resolve_inline_content(inline)),
             Some(location_content::Kind::Obsidian(obsidian)) => match &obsidian_resolver {
                 Some(resolver) => resolver.resolve(obsidian).await.map_err(|e| e.to_string()),
-                None => Err(format!(
-                    "Location \"{}\" has obsidian content, but this project has no vault configured",
-                    location.id
-                )),
+                None => Err(no_vault_error(&location.id)),
             },
             None => continue,
         };
@@ -115,35 +88,4 @@ pub async fn save_project(path: &Path, project: &HexenProject) -> Result<(), Ope
     let yaml_text = serialize_hexen_project(project).map_err(ParseError::Yaml)?;
     tokio::fs::write(path, yaml_text).await?;
     Ok(())
-}
-
-fn validate_references(project: &HexenProject) -> Vec<String> {
-    let mut warnings = Vec::new();
-    let mut seen_ids: HashSet<&str> = HashSet::new();
-
-    for location in &project.locations {
-        if !seen_ids.insert(location.id.as_str()) {
-            warnings.push(format!("Duplicate location id \"{}\"", location.id));
-        }
-    }
-
-    if !seen_ids.contains(project.default_location.as_str()) {
-        warnings.push(format!(
-            "defaultLocation \"{}\" isn't a known location id",
-            project.default_location
-        ));
-    }
-
-    for location in &project.locations {
-        for link in &location.links {
-            if !seen_ids.contains(link.target.as_str()) {
-                warnings.push(format!(
-                    "Location \"{}\" links to unknown location id \"{}\"",
-                    location.id, link.target
-                ));
-            }
-        }
-    }
-
-    warnings
 }

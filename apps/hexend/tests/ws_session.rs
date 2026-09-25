@@ -208,3 +208,149 @@ async fn tempfile_project() -> std::path::PathBuf {
 fn urlencoding_lite(s: &str) -> String {
     s.replace('/', "%2F")
 }
+
+async fn start_viewer(sessions: hexend::session::Sessions) -> u16 {
+    let app = hexend::server::viewer_app(sessions);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    port
+}
+
+#[tokio::test]
+async fn viewer_surface_is_read_only_and_limited_to_open_projects() {
+    let sessions = hexend::session::new_sessions();
+    let full_app = hexend::server::app(sessions.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let full = listener.local_addr().unwrap().port();
+    tokio::spawn(async move { axum::serve(listener, full_app).await.unwrap() });
+    let viewer = start_viewer(sessions).await;
+
+    let tmp = tempfile_project().await;
+    let encoded = urlencoding_lite(tmp.to_str().unwrap());
+
+    // Not open yet: the viewer won't open it on a LAN client's say-so.
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{viewer}/ws?path={encoded}"))
+            .await
+            .expect("connect");
+    assert!(matches!(
+        ws.next().await,
+        Some(Ok(Message::Close(_))) | None
+    ));
+
+    // The GM opens it through the full API...
+    let (mut gm, _) =
+        tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{full}/ws?path={encoded}"))
+            .await
+            .expect("connect");
+    gm.next().await.expect("initial").expect("ok");
+
+    // ...now a viewer can attach, but its commands are ignored.
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{viewer}/ws?path={encoded}"))
+            .await
+            .expect("connect");
+    let Some(Ok(Message::Text(initial))) = ws.next().await else {
+        panic!("expected state")
+    };
+    assert!(initial.contains("Demo Realm"));
+    let command = serde_json::json!({ "command": { "addLocation": { "locationId": "sneaky" } } });
+    ws.send(Message::Text(command.to_string())).await.unwrap();
+    let nothing = tokio::time::timeout(Duration::from_millis(300), ws.next()).await;
+    assert!(
+        nothing.is_err(),
+        "a viewer's command must not produce a broadcast"
+    );
+
+    // The GM's changes still reach it live.
+    let command = serde_json::json!({ "command": { "addLocation": { "locationId": "from-gm" } } });
+    gm.send(Message::Text(command.to_string())).await.unwrap();
+    let Some(Ok(Message::Text(update))) = ws.next().await else {
+        panic!("expected broadcast")
+    };
+    assert!(update.contains("from-gm") && !update.contains("sneaky"));
+
+    // Images: only from the open project's own directory.
+    let dir = tmp.parent().unwrap().to_str().unwrap();
+    let get = |url: String| async move { reqwest_lite(&url).await };
+    assert_eq!(
+        get(format!(
+            "http://127.0.0.1:{viewer}/image?dir={}&file=demo.hexen.yml",
+            urlencoding_lite(dir)
+        ))
+        .await,
+        200
+    );
+    assert_eq!(
+        get(format!(
+            "http://127.0.0.1:{viewer}/image?dir=%2Fetc&file=hostname"
+        ))
+        .await,
+        404
+    );
+    assert_eq!(
+        get(format!("http://127.0.0.1:{viewer}/directory")).await,
+        404
+    );
+}
+
+/// Just the status code of a GET, over a bare TCP connection.
+async fn reqwest_lite(url: &str) -> u16 {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let rest = url.strip_prefix("http://").unwrap();
+    let (host, path) = rest.split_once('/').unwrap();
+    let mut stream = tokio::net::TcpStream::connect(host).await.unwrap();
+    let request = format!("GET /{path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
+    stream.write_all(request.as_bytes()).await.unwrap();
+    let mut response = String::new();
+    let mut buf = vec![0; 4096];
+    let n = stream.read(&mut buf).await.unwrap();
+    response.push_str(&String::from_utf8_lossy(&buf[..n]));
+    response.split_whitespace().nth(1).unwrap().parse().unwrap()
+}
+
+/// Status code of a raw HTTP request with an optional body.
+async fn http_status(port: u16, method: &str, path: &str, body: &[u8]) -> u16 {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let head = format!(
+        "{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes()).await.unwrap();
+    stream.write_all(body).await.unwrap();
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).await.unwrap();
+    String::from_utf8_lossy(&response).split_whitespace().nth(1).unwrap().parse().unwrap()
+}
+
+#[tokio::test]
+async fn image_reads_and_uploads_are_limited_to_open_projects() {
+    let port = start_server().await;
+    let tmp = tempfile_project().await;
+    let dir = urlencoding_lite(tmp.parent().unwrap().to_str().unwrap());
+    let mut png = vec![0u8; 24];
+    png[12..16].copy_from_slice(b"IHDR");
+    png[16..20].copy_from_slice(&4u32.to_be_bytes());
+    png[20..24].copy_from_slice(&3u32.to_be_bytes());
+
+    // Nothing open yet: neither an arbitrary directory nor the project's own.
+    assert_eq!(http_status(port, "GET", "/image?dir=%2Fetc&file=hostname", b"").await, 404);
+    assert_eq!(http_status(port, "GET", &format!("/image?dir={dir}&file=demo.hexen.yml"), b"").await, 404);
+    let upload = format!("/image?dir={dir}&locationId=town&ext=png");
+    assert_eq!(http_status(port, "POST", &upload, &png).await, 404);
+
+    // Open it over /ws, as the editor does before touching images.
+    let url = format!("ws://127.0.0.1:{port}/ws?path={}", urlencoding_lite(tmp.to_str().unwrap()));
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.expect("connect");
+    ws.next().await.expect("initial").expect("ok");
+
+    assert_eq!(http_status(port, "GET", &format!("/image?dir={dir}&file=demo.hexen.yml"), b"").await, 200);
+    assert_eq!(http_status(port, "GET", &format!("/image?dir={dir}&file=..%2F..%2Fetc%2Fhostname"), b"").await, 400);
+    assert_eq!(http_status(port, "GET", "/image?dir=%2Fetc&file=hostname", b"").await, 404);
+    assert_eq!(http_status(port, "POST", &upload, &png).await, 200);
+    assert!(tmp.parent().unwrap().join("_assets/town.png").exists());
+}

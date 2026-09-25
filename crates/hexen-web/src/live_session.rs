@@ -1,0 +1,167 @@
+//! A connection to one project's session on hexend's /ws — the Rust
+//! counterpart of packages/live-session's `connectLiveSession`. hexend
+//! is authoritative: every state, the first included, arrives as a
+//! `ServerMessage`, parsed with the same pbjson-generated types hexend
+//! serializes it with — so unlike the TS client there's no wire-format
+//! conversion step to keep in sync. A client never applies its own
+//! command locally; it sends it and waits to be told what happened.
+//!
+//! Pings and follow-view updates are the exception: purely ephemeral,
+//! never touching project state — hexend re-broadcasts each verbatim to
+//! every socket on the session, sender included.
+//!
+//! A read-only consumer (the presentation app) is this same type, just
+//! never sending anything.
+
+use hexen_proto::hexen::v1::{
+    client_message, server_message, ClientMessage, Command, FollowView, OpenedProjectData, Ping,
+    Redo, ServerMessage, Undo,
+};
+use wasm_bindgen::prelude::*;
+use web_sys::{MessageEvent, WebSocket};
+
+/// Keeps the socket and its JS callbacks alive; dropping it closes the
+/// connection.
+pub struct LiveSession {
+    socket: WebSocket,
+    _on_message: Closure<dyn FnMut(MessageEvent)>,
+    _on_failure: Closure<dyn FnMut(web_sys::Event)>,
+}
+
+impl LiveSession {
+    pub fn execute(&self, command: Command) {
+        self.send(client_message::Kind::Command(command));
+    }
+
+    pub fn undo(&self) {
+        self.send(client_message::Kind::Undo(Undo {}));
+    }
+
+    pub fn redo(&self) {
+        self.send(client_message::Kind::Redo(Redo {}));
+    }
+
+    /// "Look here", at an image-pixel point on a location's map.
+    pub fn ping(&self, location_id: &str, x: f64, y: f64) {
+        self.send(client_message::Kind::Ping(Ping {
+            location_id: location_id.to_owned(),
+            x,
+            y,
+        }));
+    }
+
+    /// The sender's current view (centre in image pixels, zoom level),
+    /// for Follow mode.
+    pub fn follow_view(&self, location_id: &str, x: f64, y: f64, zoom: f64) {
+        self.send(client_message::Kind::FollowView(FollowView {
+            location_id: location_id.to_owned(),
+            x,
+            y,
+            zoom,
+        }));
+    }
+
+    fn send(&self, kind: client_message::Kind) {
+        let message = ClientMessage { kind: Some(kind) };
+        let text = serde_json::to_string(&message).expect("ClientMessage always serializes");
+        if let Err(err) = self.socket.send_with_str(&text) {
+            web_sys::console::error_1(&err);
+        }
+    }
+}
+
+impl Drop for LiveSession {
+    fn drop(&mut self) {
+        self.socket.set_onmessage(None);
+        self.socket.set_onerror(None);
+        self.socket.set_onclose(None);
+        let _ = self.socket.close();
+    }
+}
+
+fn ws_url(server_url: &str, path: &str) -> String {
+    let base = server_url
+        .strip_prefix("http")
+        .map_or_else(|| server_url.to_owned(), |rest| format!("ws{rest}"));
+    format!("{base}/ws?path={}", js_sys::encode_uri_component(path))
+}
+
+/// Something hexend sent.
+#[derive(Debug, Clone)]
+pub enum Event {
+    /// The project's state — the handshake, then after every command.
+    State(OpenedProjectData),
+    Ping(Ping),
+    FollowView(FollowView),
+}
+
+/// Calls `on_event` with everything hexend sends, starting with the
+/// handshake state. `on_error` fires at most once, and only if the
+/// connection fails or closes before that first state; after that, a
+/// dropped connection just stops the updates.
+pub fn connect(
+    server_url: &str,
+    path: &str,
+    on_event: impl Fn(Event) + 'static,
+    on_error: impl Fn(String) + 'static,
+) -> Result<LiveSession, String> {
+    let socket = WebSocket::new(&ws_url(server_url, path)).map_err(|e| format!("{e:?}"))?;
+    let opened = std::rc::Rc::new(std::cell::Cell::new(false));
+
+    let on_message = {
+        let opened = opened.clone();
+        Closure::<dyn FnMut(MessageEvent)>::new(move |evt: MessageEvent| {
+            let Some(text) = evt.data().as_string() else {
+                return;
+            };
+            let Ok(ServerMessage { kind: Some(kind) }) = serde_json::from_str(&text) else {
+                return;
+            };
+            match kind {
+                server_message::Kind::State(state) => {
+                    opened.set(true);
+                    on_event(Event::State(state));
+                }
+                // Only meaningful once there's a state to show them against.
+                _ if !opened.get() => {}
+                server_message::Kind::Ping(ping) => on_event(Event::Ping(ping)),
+                server_message::Kind::FollowView(view) => on_event(Event::FollowView(view)),
+            }
+        })
+    };
+
+    let on_failure = {
+        let server_url = server_url.to_owned();
+        let errored = std::cell::Cell::new(false);
+        Closure::<dyn FnMut(web_sys::Event)>::new(move |evt: web_sys::Event| {
+            // A failed connection fires "error" and then "close"; only the
+            // close carries hexend's reason (no such project, a parse
+            // error, not open for viewers), so report on the close.
+            let Some(close) = evt.dyn_ref::<web_sys::CloseEvent>() else {
+                errored.set(true);
+                return;
+            };
+            if opened.replace(true) {
+                return;
+            }
+            let reason = close.reason();
+            on_error(if !reason.is_empty() {
+                reason
+            } else if errored.get() {
+                format!("Couldn't connect to {server_url}")
+            } else {
+                format!("Connection to {server_url} closed before it opened")
+            });
+        })
+    };
+
+    socket.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+    socket.set_onerror(Some(on_failure.as_ref().unchecked_ref()));
+    socket.set_onclose(Some(on_failure.as_ref().unchecked_ref()));
+
+    Ok(LiveSession {
+        socket,
+        _on_message: on_message,
+        _on_failure: on_failure,
+    })
+}

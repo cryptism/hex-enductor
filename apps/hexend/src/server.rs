@@ -25,8 +25,8 @@ use crate::pathutil::{resolve, resolve_cwd};
 use crate::pb::hexen::v1::{client_message, server_message, ClientMessage, ServerMessage};
 use crate::router::{create_project, list_directory};
 use crate::session::{
-    add_socket, apply_and_broadcast, broadcast_follow_view, broadcast_ping, get_or_create_session, redo,
-    remove_socket, session_state, undo, Sessions,
+    add_socket, apply_and_broadcast, broadcast_follow_view, broadcast_ping, get_or_create_session, get_session,
+    open_project_dirs, redo, remove_socket, session_state, undo, Sessions,
 };
 
 #[derive(Clone)]
@@ -55,6 +55,21 @@ pub fn app(sessions: Sessions) -> Router {
         .with_state(AppState { sessions })
 }
 
+/// The read-only surface for other devices (a player-facing screen on
+/// the LAN): no directory listing, no project creation, no uploads, and
+/// a /ws that only attaches to projects already open through [`app`]
+/// and ignores anything a client sends. Images, as on [`app`], only
+/// from open projects' directories. Shares `sessions` with the full app, so
+/// viewers see every change live. Callers add their own static files
+/// (e.g. the presentation app) on top.
+pub fn viewer_app(sessions: Sessions) -> Router {
+    Router::new()
+        .route("/image", get(get_image))
+        .route("/ws", get(viewer_ws_handler))
+        .layer(CorsLayer::permissive())
+        .with_state(AppState { sessions })
+}
+
 async fn root() -> &'static str {
     "hexend is awake, and watching your maps."
 }
@@ -64,11 +79,27 @@ struct WsQuery {
     path: Option<String>,
 }
 
-async fn ws_handler(Query(query): Query<WsQuery>, State(state): State<AppState>, ws: WebSocketUpgrade) -> Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, query.path, state))
+#[derive(Clone, Copy, PartialEq)]
+enum Access {
+    /// Opens the project if needed, applies commands.
+    Full,
+    /// Only attaches to an open project; incoming messages are dropped.
+    ReadOnly,
 }
 
-async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppState) {
+async fn ws_handler(Query(query): Query<WsQuery>, State(state): State<AppState>, ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(move |socket| handle_socket(socket, query.path, state, Access::Full))
+}
+
+async fn viewer_ws_handler(
+    Query(query): Query<WsQuery>,
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    ws.on_upgrade(move |socket| handle_socket(socket, query.path, state, Access::ReadOnly))
+}
+
+async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppState, access: Access) {
     let Some(path) = path else {
         let _ = socket
             .send(Message::Close(Some(CloseFrame {
@@ -79,13 +110,19 @@ async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppSt
         return;
     };
 
-    let session = match get_or_create_session(&state.sessions, &path).await {
+    let session = match access {
+        Access::Full => get_or_create_session(&state.sessions, &path).await.map_err(|e| e.to_string()),
+        Access::ReadOnly => get_session(&state.sessions, &path)
+            .await
+            .ok_or_else(|| "That project isn't open on this server".to_string()),
+    };
+    let session = match session {
         Ok(session) => session,
         Err(err) => {
             let _ = socket
                 .send(Message::Close(Some(CloseFrame {
                     code: 1011,
-                    reason: err.to_string().into(),
+                    reason: err.into(),
                 })))
                 .await;
             return;
@@ -123,6 +160,9 @@ async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppSt
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = stream.next().await {
             let Message::Text(text) = msg else { continue };
+            if access == Access::ReadOnly {
+                continue;
+            }
             let Ok(client_message) = serde_json::from_str::<ClientMessage>(&text) else {
                 continue;
             };
@@ -178,20 +218,28 @@ fn sanitize_filename(id: &str) -> String {
         .collect()
 }
 
-// No auth for v1 (local/LAN trust), but a file server still shouldn't
-// let a caller walk out of the project directory it was handed.
+// No auth, so image reads and uploads are limited to the directories
+// of projects that are open in a session: a caller can't point `dir`
+// at an arbitrary folder, and `file` can't walk back out of it.
 #[derive(Deserialize)]
 struct ImageGetQuery {
     dir: Option<String>,
     file: Option<String>,
 }
 
-async fn get_image(Query(q): Query<ImageGetQuery>) -> Response {
+/// `dir` resolved, if it's the directory of an open project.
+async fn open_project_dir(sessions: &Sessions, dir: &str) -> Option<std::path::PathBuf> {
+    let dir = resolve_cwd(Path::new(dir));
+    open_project_dirs(sessions).await.contains(&dir).then_some(dir)
+}
+
+async fn get_image(State(state): State<AppState>, Query(q): Query<ImageGetQuery>) -> Response {
     let (Some(dir), Some(file)) = (q.dir, q.file) else {
         return (StatusCode::BAD_REQUEST, "Missing dir or file query param").into_response();
     };
-
-    let base = resolve_cwd(Path::new(&dir));
+    let Some(base) = open_project_dir(&state.sessions, &dir).await else {
+        return (StatusCode::NOT_FOUND, "Not found").into_response();
+    };
     let target = resolve(&base, Path::new(&file));
     if !target.starts_with(&base) {
         return (StatusCode::BAD_REQUEST, "file escapes the project directory").into_response();
@@ -216,7 +264,11 @@ struct ImagePostQuery {
     ext: String,
 }
 
-async fn post_image(Query(q): Query<ImagePostQuery>, body: axum::body::Bytes) -> Response {
+async fn post_image(
+    State(state): State<AppState>,
+    Query(q): Query<ImagePostQuery>,
+    body: axum::body::Bytes,
+) -> Response {
     let Some(ext) = upload_ext(&q.ext.to_lowercase()) else {
         return (
             StatusCode::BAD_REQUEST,
@@ -225,8 +277,11 @@ async fn post_image(Query(q): Query<ImagePostQuery>, body: axum::body::Bytes) ->
             .into_response();
     };
 
+    let Some(project_dir) = open_project_dir(&state.sessions, &q.dir).await else {
+        return (StatusCode::NOT_FOUND, "No open project in that directory").into_response();
+    };
     let safe_name = format!("{}.{ext}", sanitize_filename(&q.location_id));
-    let assets_dir = resolve_cwd(Path::new(&q.dir)).join("_assets");
+    let assets_dir = project_dir.join("_assets");
     let target = assets_dir.join(&safe_name);
     if !target.starts_with(&assets_dir) {
         return (StatusCode::BAD_REQUEST, "file escapes the project directory").into_response();

@@ -1,176 +1,196 @@
 # hex-enductor — working notes
 
-## One server: `apps/hexend` (Rust)
+All Rust, one Cargo workspace (`Cargo.toml`, one `Cargo.lock`, one
+`target/`). The TypeScript apps and packages were removed in 2026-09;
+don't go looking for `packages/*` or `*.tsx` — git history has them if
+you need to know what something used to do.
 
-`apps/hexend` used to be TypeScript (Hono/tRPC); as of 2026-09-17 it's a
-from-scratch Rust rewrite (axum), consolidated from a parallel
-`apps/hexend-rs` that existed briefly during the migration. There is no
-TS server anymore — don't go looking for `apps/hexend/src/*.ts`.
+Run everything through `nix develop --command bash -c '...'` — that's
+where trunk, the pinned wasm-bindgen, and the desktop app's GTK/WebKit
+libraries live. `protoc` is **not** needed (see hexen-proto below).
 
-- Its message schema is defined in `schema/hexen/v1/*.proto`.
-  `apps/hexend/build.rs` codegens it into Rust: prost for the structs,
-  pbjson for protobuf's canonical JSON mapping (see "wire-format
-  gotcha" below).
-- Building/testing it requires `protoc`/`buf`, which only exist in the
-  nix devShell: run everything through
-  `nix develop --command bash -c '...'`, not directly.
-- Listens on **port 4000** by default (`PORT` env var to override).
-- `bun run dev:hexend` from the repo root runs `cargo run
-  --manifest-path apps/hexend/Cargo.toml` — it's a plain Cargo command
-  wrapped in a bun script, not a bun-native dev server.
-- Not part of the bun workspace (`package.json`'s `workspaces` only
-  globs `packages/*`/`apps/*` for *.json-having packages that bun
-  resolves — a Cargo crate with no package.json is invisible to
-  `bun run --filter '*'`). `cd apps/hexend && cargo test`/`cargo build`
-  directly, inside `nix develop`.
+## Layout
 
-## Map rendering: `packages/map-core` is Konva, not Leaflet
+- `schema/hexen/v1/*.proto` — the project format and the /ws protocol.
+  The `.hexen.yml` on disk is protobuf's canonical JSON mapping, as
+  YAML (pbjson): lowerCamelCase fields, a `oneof` written as
+  `{ <member>: value }` (e.g. `grid: { hex: {...} }`, `content:
+  { obsidian: { ref: … } }`), zero-valued scalars omitted, unknown
+  fields rejected.
+- `crates/hexen-proto` — prost + pbjson codegen of the protos. Compiles
+  them with protox (pure Rust). Also embeds the descriptor set
+  (`FILE_DESCRIPTOR_SET`) for tools that work from the schema.
+- `crates/project-ops` — everything about a project that touches no
+  disk or socket: YAML parse/serialize/validate (`document`), the
+  Command reducer (`commands`, `mutations`), undo `History`, Obsidian
+  note parsing (`content`), image sizing. hexend wraps it with tokio::fs
+  and the WS session; the editor's browser-folder storage runs the same
+  code in wasm. One implementation, one format.
+  - `LinkPatch.icon`/`color` set to `""` **clear** the field (proto3
+    JSON can't send null).
+- `crates/map-core` — framework-free map maths: hex/square grids, fog
+  cells, Perlin fog texture, link icons (`link_icons.rs`, generated —
+  see hexen-cli), `viewport` (pan/zoom).
+- `crates/hexen-web` — Leptos pieces the two browser apps share:
+  `MapCanvas` and the /ws `live_session` client, plus `map.css`.
+  **No Leaflet**: the map is one SVG in image-pixel space (image, grid
+  path, fog path) under a `Viewport` transform, with HTML pins/popups
+  over it; pan/wheel/pinch and the editor tools (click-to-place, fog
+  painting) are done by hand with pointer events. Keep it that way.
+- `apps/hexend` — the server (axum). `PORT` (default 4000), `HOST`
+  (default **127.0.0.1**; it has no auth and can open/write/list files
+  anywhere, so it's loopback unless you ask). `server::app` is the full
+  API; `server::viewer_app` is a read-only surface for other devices
+  (a /ws that only attaches to already-open projects and drops client
+  messages, no listing/creation/uploads). On both, `/image` reads and
+  uploads only work inside an open project's directory.
+- `apps/editor` — the editor (Leptos CSR, trunk, :5173).
+  `ui_state.rs` holds every "which switch resets which" rule as plain
+  methods (tested natively). `storage/` has two backends:
+  - server: `hexen_web::live_session` + plain HTTP for images;
+  - browser folder (File System Access API, Chromium only): runs
+    project-ops in wasm, notifies from memory immediately, and writes
+    the file in the background, **coalescing** writes so a fast fog
+    stroke can't land an older state last. Old-format files get an
+    error pointing at `hexen migrate`.
+  - `showDirectoryPicker`/`requestPermission` are bound by hand in
+    `storage/local_fs.rs` (web-sys gates them behind
+    `web_sys_unstable_apis`; don't turn that cfg on for the build).
+  - hexend's URL: the desktop app's (see below) when running inside
+    it, else baked in at build time, `HEXEND_URL=… trunk build`
+    (default `http://localhost:4000`).
+- `apps/presentation` — read-only live view for a second screen (trunk,
+  :5174), driven by `?server=…&path=…`.
+- `apps/desktop` — Tauri 2; see below.
+- `apps/hexen-cli` — the `hexen` binary: `import-obsidian`,
+  `strip-obsidian-frontmatter`, `migrate` (old "type:" format →
+  current), `sync-link-icons` (regenerates `link_icons.rs`), `schema`
+  (regenerates `docs/hexen.schema.json` from the proto descriptors —
+  a test fails if the checked-in file is stale, so run it after any
+  `.proto` change). `cargo run -p hexen-cli -- <command> --help`.
 
-As of 2026-09-17 `<MapCanvas>` (`packages/map-core/src/MapCanvas.tsx`)
-is built on Konva/`react-konva`, not Leaflet — Leaflet's geographic CRS
-and pane/z-index system were a poor fit for what this app actually
-needs (a flat image with a grid and pins), and were the root cause of
-several bugs (misalignment on pan/zoom, shift+click not registering
-during fog paint, fog rendering transparent in presentation). Konva's
-draw order *is* z-order, and everything works directly in the image's
-own pixel space — there's no more lat/lng translation layer
-(`coords.ts` is gone). Don't reach for `leaflet`/`react-leaflet` docs
-or APIs when touching this code.
+`wasm-bindgen` is pinned `=0.2.127` (hexen-web, editor) to match
+nixpkgs' `wasm-bindgen-cli_0_2_127` in the flake — trunk needs the two
+identical, and trunk's own downloaded binary won't run on NixOS. Bump
+them together.
 
-## Schema: still mid-migration to protobuf
+## Desktop app: `apps/desktop` (Tauri 2)
 
-**`packages/hexen-schema` (hand-written Zod) has not been regenerated
-from proto** — it's the same shapes, modeled the old "type"-discriminated
-way, and is what `map-core`, `project-ops`, and the editor's in-memory
-project representation all still use. There's a referenced-but-not-yet-built
-`packages/hexen-proto-ts` that would eventually replace it and make the
-wire-format seam below unnecessary.
+One binary: the editor in a native window, hexend **in-process** (it's
+a library — no sidecars), and the presentation app served to extra
+windows and, opt-in, the LAN.
 
-### The wire-format gotcha (read this before touching Command/Grid/Content)
+- `src/servers.rs` is the substance (natively tested):
+  - local server: `hexend::server::app` on 127.0.0.1, random port, for
+    the editor and local presentation windows;
+  - LAN server (off by default, toggled from the editor):
+    `viewer_app` on 0.0.0.0, port 4747 if free;
+  - both serve the presentation app (built with `--public-url
+    /presentation/` into `apps/desktop/presentation-dist/`, embedded
+    via rust-embed) under `/presentation/`.
+- `src/lib.rs`: Tauri wiring. The editor window gets
+  `window.__HEXEN_DESKTOP__ = { serverUrl, lanUrl, version }` via an
+  initialization script — **that global is the feature flag**
+  (`apps/editor/src/desktop.rs`): with it, the editor talks to the
+  embedded server, the picker offers the native file dialog instead of
+  the browser-folder backend, and the sidebar gets "Server &
+  presentation…". The same editor build works in a browser without it.
+  Commands: `server_info`, `set_lan_sharing`, `open_presentation_window`,
+  `pick_project_file`. Only the `main` window has IPC capabilities;
+  presentation windows are plain http:// pages.
+- Not in the workspace's `default-members` (needs WebKitGTK and the
+  front-end builds), so root `cargo test` skips it.
+- Build: `cd apps/desktop && cargo tauri build` (its beforeBuildCommand
+  runs both trunk builds; `--no-bundle` for just the binary, `--bundles
+  deb` etc. for packages). The binary is `target/{debug,release}/hex-enductor`.
 
-protobuf's canonical JSON mapping serializes a `oneof` as
-`{ <selected field name>: value }`. Zod's discriminated unions (what
-`hexen-schema` and everything above it uses) look like
-`{ type: "...", ...fields }`. These are genuinely different shapes for
-every oneof-backed type: `Grid` (hex/square), `ProjectContent` and
-`LocationContent` (obsidian/inline), and the `Command` union, plus the
-`ClientMessage`/`ServerMessage` envelope itself.
+## Fog of war (issue #6)
 
-**`packages/live-session/src/wireFormat.ts` is the one seam that
-translates between them**, used by:
-- `packages/live-session/src/liveSession.ts` — every WS message in
-  and out of `connectLiveSession`.
-- `apps/editor/src/ProjectPicker.tsx` — the "New project" POST body's
-  `content` field (via `projectContentToWire`).
+- `Location.fog` — presence (even empty) means fog is on;
+  `FogOfWar.revealedCells` — opaque cell keys, meaningless to the server.
+- Commands: `setFog` (start with `{revealedCells: []}` / clear with
+  absent) and `setFogCells` (batch-sets a list of cells' revealed state
+  — plural and idempotent so a click-drag stroke lands as one command
+  per ~80ms tick, not one per cell).
+- Cell addressing is a **fixed 64px grid over the image**, independent
+  of the terrain grid — `crates/map-core/src/fog.rs`. The keys are in
+  saved projects, so the scheme can't change.
+- **Control lives in the editor**, via two independent switches
+  (`ui_state.rs`):
+  - GM mode alone: a read-only, Krita-style "layers panel" — a fog-layer
+    visibility checkbox that only affects the GM's own view, plus a
+    status line that always states what players currently see
+    (`fog_controls.rs`).
+  - GM mode + edit mode: the "Paint fog" tool (click-drag reveals,
+    shift at stroke start restores) and "Fog/Reveal entire map" behind
+    a confirm. Holding shift while painting dims the fog overlay
+    (cosmetic only). Strokes fill in every cell between pointer
+    samples.
+- The presentation app is purely read-only: it renders `location.fog`
+  like any other state. Don't add GM controls there; they'd duplicate
+  `fog_controls.rs`.
+- Pins whose cell is hidden fade with the fog and stop taking clicks
+  (`MapCanvas`), so fog hides them for players and dims them for the GM.
 
-If you add a new oneof-shaped field to a `.proto` file, or a new
-`Command` variant, **you must add/extend a converter in
-`wireFormat.ts`** or anything going through `connectLiveSession` (or
-project creation) will fail silently — no error, just a hung
-"Connecting…" or a 400 from the server. `wireFormat.test.ts` round-trips
-every existing converter — extend it alongside the schema. Only convert
-what's actually used: this module briefly carried a full reverse
-direction (`openedProjectDataToWire`, `commandFromWire`,
-`locationContentToWire`) for the old TS server to speak wire format
-back; that's gone now that hexend is Rust-only and gets the wire shape
-for free from prost/pbjson — don't resurrect it without a real caller.
+## Ping and Follow mode
 
-Plain (non-oneof) fields need no conversion: protobuf JSON's default
-camelCase field naming already matches `hexen-schema`'s field names
-(`locationId`, `revealedCells`, `distancePerCell`, etc.).
-
-### A second, un-migrated dialect: local-fs storage
-
-`apps/editor`'s browser-native storage backend (File System Access API,
-`storage/localFsStorage.ts`) reads and writes `.hexen.yml` files
-directly via `hexen-schema`'s `parseHexenProject`/`serializeHexenProject`
-— the **old** "type"-discriminated YAML shape, not hexend's oneof-shaped
-one. A project file touched by the server and a project file touched by
-local-fs storage are, right now, two different on-disk dialects that
-can't necessarily read each other back (this is exactly the bug that
-made the old TS `apps/hexend` unable to open `examples/demo/demo.hexen.yml`
-after it was migrated — see git history around 2026-09-17). Not fixed;
-flagged as a real follow-up. Fixing it properly means either migrating
-`hexen-schema` itself to the oneof convention, or giving
-`localFsStorage.ts` a `wireFormat.ts`-style conversion step of its own.
+Ephemeral, never persisted, no undo: `ClientMessage.ping`/`followView`
+are re-broadcast verbatim to every socket on the session as
+`ServerMessage.ping`/`followView` (`session.rs`). In GM mode the editor
+gets a Ping button (click the map; shows for ~2s in every window, and
+switches the presentation to that location) and a Follow sub-toggle
+that sends the GM's view after each pan/zoom so the presentation
+glides to match. Once Follow is off the presentation keeps the last
+view and can be panned freely. The presentation also toggles
+fullscreen on `f` and lists recently watched projects on its landing
+page (localStorage).
 
 ## Running things for manual/browser testing
 
-Fast path — one command, from inside `nix develop`, starts all three
-and opens a browser tab for the editor and one for presentation,
-already pointed at the project (`--no-browser` to skip that part):
-
 ```
-nix develop --command bash -c 'bun run launch --project examples/demo/demo.hexen.yml'
+nix develop --command bash -c 'cargo run -p hexen-cli -- launch examples/demo/demo.hexen.yml'
 ```
 
-It picks fixed ports (4000/5173/5174 by default, `--hexend-port`/
-`--editor-port`/`--presentation-port` to override) rather than letting
-Vite "pick a free port" the way the manual dance below does, since it
-needs to know the URLs to open. See `scripts/launch.ts`.
-
-By hand, same result minus the auto-opened tabs:
+`hexen launch` starts hexend and both trunk dev servers (ports via
+`--hexend-port`/`--editor-port`/`--presentation-port`), waits for them,
+and opens the editor and presentation already pointed at the project
+(`--no-browser` to skip). Ctrl+C, or any one of them exiting, stops
+them all. Separately:
 
 ```
-nix develop --command bash -c 'cd apps/hexend && cargo run'          # :4000
-nix develop --command bash -c 'bun run --cwd apps/editor dev'        # vite picks a free port
-nix develop --command bash -c 'bun run --cwd apps/presentation dev'  # same
+nix develop --command bash -c 'cd apps/hexend && cargo run'         # :4000
+nix develop --command bash -c 'cd apps/editor && trunk serve'       # :5173
+nix develop --command bash -c 'cd apps/presentation && trunk serve' # :5174
+nix develop --command bash -c 'cd apps/desktop && cargo tauri build --no-bundle && ../../target/release/hex-enductor'
 ```
 
-Editor: open the picker, paste the absolute path to a `.hexen.yml`
-(e.g. `examples/demo/demo.hexen.yml`) under "open a project on a
-locally-running server" — or append the same
-`?server=http://localhost:4000&path=<ABSOLUTE path>` the launch script
-uses (see `apps/editor/src/server.ts`/`App.tsx`). Presentation: append
-`?server=http://localhost:4000&path=<ABSOLUTE path>` to its URL — it's
-read-only, driven by whatever the editor does.
+Editor: paste the absolute path to a `.hexen.yml` (e.g.
+`examples/demo/demo.hexen.yml`) into the picker. Presentation: append
+`?server=http://localhost:4000&path=<ABSOLUTE path>` to its URL. hexend
+keeps sessions in memory for its lifetime — restart it after editing a
+project file by hand.
 
-## Fog of war (issue #6) — landed 2026-09-17
-
-- `Location.fog: FogOfWar | null` — presence (even empty) means fog is
-  on. `FogOfWar.revealedCells: string[]` — opaque cell keys, meaningless
-  to the server.
-- Commands: `setFog` (start with `{revealedCells:[]}` / clear with
-  `null`) and `setFogCells` (batch-sets a list of cells' revealed state
-  explicitly — plural and idempotent-by-design so a click-drag paint
-  stroke lands as one command per ~80ms tick, not one per cell).
-- Cell addressing is a **fixed 64px grid over the image**, independent
-  of whatever terrain grid (hex/square/none) the Location has — see
-  `packages/map-core/src/fog.ts`.
-- **Control lives in the editor** (`apps/editor`), via two independent
-  toggles in `store.ts`/`App.tsx`:
-  - `gmMode` alone: a read-only, Krita-style "layers panel" — a
-    fog-layer visibility checkbox that only affects the GM's own view
-    (never sends a command), plus a status line that always states
-    what players currently see, regardless of that local peek. See
-    `FogControls.tsx`.
-  - `gmMode` + `editMode` together: unlocks the "Paint fog" tool
-    (armed like Add Location — click-drag reveals, shift reverses to
-    restore, decided once per stroke) and "Fog entire map"/"Reveal
-    entire map" blanket actions behind a confirm modal.
-  - Holding shift while painting also live-dims the fog overlay so you
-    can see what you're about to re-cover (`MapCanvas.tsx`'s
-    `shiftHeld` state, cosmetic only — doesn't touch the paint logic).
-- `apps/presentation` is pure read-only: it renders `location.fog` like
-  any other state, no editing surface. GM control was briefly built
-  there too (`?gm=1`) before moving to the editor — don't resurrect
-  that path without a reason, it'd duplicate `FogControls.tsx`.
-- Fixed as of the Konva rewrite below: the fog layer draws after the
-  links layer, so a hidden cell now actually covers any pin under it,
-  for both GM and player views.
+- Browser-testing the folder backend: Playwright can't drive the native
+  picker, so seed OPFS (`navigator.storage.getDirectory()`) and stub
+  `window.showDirectoryPicker` to return that directory via
+  `addInitScript` — the app code runs unchanged.
+- Headless desktop checks in a container: `Xvfb :99`, run the binary
+  under `dbus-launch` with `WEBKIT_DISABLE_COMPOSITING_MODE=1`, drive it
+  with `xdotool`, screenshot with ImageMagick's `import -window root`.
 
 ## Testing
 
 ```
-nix develop --command bash -c 'bun run --filter "*" test'   # every TS workspace
-nix develop --command bash -c 'cd apps/hexend && cargo test'
-nix develop --command bash -c 'bun run typecheck'
+nix develop --command bash -c 'cargo test'                           # workspace, minus desktop
+nix develop --command bash -c 'cargo test -p hex-enductor-desktop'   # needs presentation-dist built
+nix develop --command bash -c 'cargo clippy --workspace --all-targets'
+nix develop --command bash -c 'cargo clippy -p editor -p presentation --target wasm32-unknown-unknown'
+nix develop --command bash -c 'cd schema && buf lint'
 ```
 
-Known pre-existing (unrelated) typecheck failure:
-`scripts/sync-link-icons.ts:81` — `TS2532: Object is possibly
-'undefined'`. Not caused by any hexend/fog work; low priority, hasn't
-been triaged.
+`apps/hexend` isn't rustfmt-clean and has never been: don't run
+`cargo fmt` over it (or the whole workspace) as part of an unrelated
+change — format the crates you touched, `-p <crate>`.
 
 ## Issue tracking
 

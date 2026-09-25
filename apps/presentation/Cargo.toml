@@ -1,0 +1,20 @@
+[package]
+name = "presentation"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Read-only live view of a hexend project session, for a second screen (Leptos, client-side)."
+
+[dependencies]
+hexen-proto = { path = "../../crates/hexen-proto" }
+map-core = { path = "../../crates/map-core" }
+hexen-web = { path = "../../crates/hexen-web" }
+leptos = { version = "0.8", features = ["csr"] }
+js-sys = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+console_error_panic_hook = "0.1"
+
+[dependencies.web-sys]
+version = "0.3"
+features = ["Document", "Element", "KeyboardEvent", "Location", "Storage", "UrlSearchParams", "Window"]

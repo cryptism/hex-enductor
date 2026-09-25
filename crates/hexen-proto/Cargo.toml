@@ -1,0 +1,18 @@
+[package]
+name = "hexen-proto"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Rust types for schema/hexen/v1/*.proto — prost structs plus pbjson's canonical JSON mapping."
+
+[build-dependencies]
+prost-build = "0.13"
+pbjson-build = "0.7"
+protox = "0.7"
+
+[dependencies]
+prost = "0.13"
+prost-types = "0.13"
+pbjson = "0.7"
+pbjson-types = "0.7"
+serde = "1"

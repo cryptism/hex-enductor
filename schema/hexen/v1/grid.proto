@@ -22,7 +22,7 @@ message GridStyle {
 }
 
 // A hex lattice calibrated by an origin plus two basis vectors — see
-// packages/map-core/src/hexMath.ts for the math this feeds.
+// crates/map-core/src/hex_math.rs for the math this feeds.
 message HexGrid {
   // Pixel position of one hex's centre.
   Point origin = 1;

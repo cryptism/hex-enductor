@@ -1,0 +1,30 @@
+# The Rust side of the repo. Each member is also buildable on its own
+# (`cd apps/hexend && cargo test`), but they share one lockfile and one
+# target/ dir from here.
+[workspace]
+resolver = "2"
+members = [
+    "apps/desktop",
+    "apps/editor",
+    "apps/hexen-cli",
+    "apps/hexend",
+    "apps/presentation",
+    "crates/hexen-proto",
+    "crates/hexen-web",
+    "crates/map-core",
+    "crates/project-ops",
+]
+# apps/desktop needs WebKitGTK and both front ends already built, so a
+# plain `cargo build`/`cargo test` at the root leaves it out; build it
+# explicitly (`cargo build -p hex-enductor-desktop`, or `cargo tauri build`
+# in apps/desktop for installable bundles).
+default-members = [
+    "apps/editor",
+    "apps/hexen-cli",
+    "apps/hexend",
+    "apps/presentation",
+    "crates/hexen-proto",
+    "crates/hexen-web",
+    "crates/map-core",
+    "crates/project-ops",
+]
