@@ -38,9 +38,11 @@ fn empty_mapping() -> serde_yml::Value {
 }
 
 /// Splits a leading `---`-delimited YAML frontmatter block off a
-/// note's body. Obsidian notes only ever use this one frontmatter
-/// style, so a full multi-format parser is more than this needs.
-fn split_frontmatter(raw: &str) -> (serde_yml::Value, String) {
+/// note's body, returning the frontmatter as a mapping (empty if there
+/// is none or it isn't one). Obsidian notes only ever use this one
+/// frontmatter style, so a full multi-format parser is more than this
+/// needs.
+pub fn split_frontmatter(raw: &str) -> (serde_yml::Value, String) {
     let is_delim = |l: &str| l.trim_end_matches('\r') == "---";
 
     let mut lines = raw.split('\n');

@@ -13,3 +13,8 @@ pub mod hexen {
         include!(concat!(env!("OUT_DIR"), "/hexen.v1.serde.rs"));
     }
 }
+
+/// The compiled schema as an encoded `google.protobuf.FileDescriptorSet`
+/// (with source comments) — for tools that work from the schema itself,
+/// like `hexen schema`'s JSON Schema generator.
+pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hexen_descriptor.bin"));
