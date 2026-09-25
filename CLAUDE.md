@@ -26,30 +26,60 @@ TS server anymore — don't go looking for `apps/hexend/src/*.ts`.
 
 ## Rust front ends: moving off TypeScript
 
-The plan is to port the TS apps to Rust/Leptos one at a time,
-presentation first, then the editor. Workspace members:
+The TS apps are being ported to Rust/Leptos one at a time; both
+front ends now have Rust versions. Workspace members:
 
 - `crates/hexen-proto` — generated schema types, shared by hexend
   (native) and the wasm front ends. Rust clients deserialize hexend's
   messages with the same pbjson types hexend serializes them with, so
   **the `wireFormat.ts` seam doesn't exist on the Rust side**.
+- `crates/project-ops` — everything about a project that touches no
+  disk or socket: YAML parse/serialize/validate, the Command reducer,
+  undo `History`, Obsidian note parsing, image sizing. hexend wraps it
+  with tokio::fs + the WS session; editor-rs's browser-folder storage
+  runs the same code in wasm. One implementation, one YAML dialect.
+  - `LinkPatch.icon`/`color` set to `""` **clear** the field (proto3
+    JSON can't send null). The TS editor's "None" icon/blank color were
+    silently ignored by hexend for exactly that reason.
 - `crates/map-core` — framework-free port of `packages/map-core`: hex/
   square grid geometry, fog cell addressing (keys must stay identical
   to `fog.ts` while the TS editor still writes them), Perlin fog
   texture, link icons, plus `viewport` (pan/zoom math). Natively
   testable: `cargo test -p map-core`.
-- `apps/presentation-rs` — Leptos (CSR) port of `apps/presentation`,
-  built with trunk. **No Leaflet**: the map (`src/map_canvas.rs`) is
-  one SVG in image-pixel space (image, grid path, fog path) under a
-  `Viewport` transform, with HTML pins/popups over it and pan/wheel/
-  pinch done by hand with pointer events. Keep it that way for the
-  editor port too.
-  - `wasm-bindgen` is pinned `=0.2.127` to match nixpkgs'
-    `wasm-bindgen-cli_0_2_127` in the flake — trunk needs the two
-    identical, and trunk's own downloaded binary won't run on NixOS.
-    Bump both together.
-  - `apps/presentation` (TS) still exists until presentation-rs is
-    signed off; then delete it.
+- `crates/hexen-web` — Leptos pieces both front ends share: `MapCanvas`
+  and the /ws `live_session` client, plus `map.css`. **No Leaflet**:
+  the map is one SVG in image-pixel space (image, grid path, fog path)
+  under a `Viewport` transform, with HTML pins/popups over it and
+  pan/wheel/pinch and the editor tools (click-to-place, fog painting)
+  done by hand with pointer events. Keep it that way.
+- `apps/presentation-rs` — port of `apps/presentation` (trunk, :5175).
+- `apps/editor-rs` — port of `apps/editor` (trunk, :5176). `ui_state.rs`
+  is the zustand store as plain methods (tested natively); `storage/`
+  is ProjectStorage with two backends:
+  - server: `hexen_web::live_session` + plain HTTP for images;
+  - browser folder (File System Access API, Chromium only): runs
+    project-ops in wasm, notifies from memory immediately, and writes
+    the file in the background, **coalescing** writes so a fast fog
+    stroke can't land an older state last. This backend now reads and
+    writes hexend's dialect — the old "two dialects" problem below is
+    gone on the Rust side; old-dialect files get an error pointing at
+    `scripts/migrate-project-to-wire-format.ts`.
+  - `showDirectoryPicker`/`requestPermission` are bound by hand in
+    `storage/local_fs.rs` (web-sys gates them behind
+    `web_sys_unstable_apis`; don't turn that cfg on for the build).
+  - hexend's URL is baked in at build time: `HEXEND_URL=… trunk build`
+    (default `http://localhost:4000`).
+- `wasm-bindgen` is pinned `=0.2.127` (hexen-web and editor-rs) to
+  match nixpkgs' `wasm-bindgen-cli_0_2_127` in the flake — trunk needs
+  the two identical, and trunk's own downloaded binary won't run on
+  NixOS. Bump all of them together.
+- `apps/presentation` and `apps/editor` (TS) still exist until the Rust
+  versions are signed off; then delete them, and `packages/*` with them.
+
+Browser-testing the folder backend: Playwright can't drive the native
+picker, so seed OPFS (`navigator.storage.getDirectory()`) and stub
+`window.showDirectoryPicker` to return that directory via
+`addInitScript` — the app code runs unchanged.
 
 **Latent TS bug the Rust port surfaced:** proto3 JSON omits
 zero-valued scalars (e.g. `b1: {x: 60}` with no `y`), and
@@ -114,6 +144,9 @@ after it was migrated — see git history around 2026-09-17). Not fixed;
 flagged as a real follow-up. Fixing it properly means either migrating
 `hexen-schema` itself to the oneof convention, or giving
 `localFsStorage.ts` a `wireFormat.ts`-style conversion step of its own.
+**Fixed in `apps/editor-rs`** (it uses crates/project-ops, i.e. the
+server's dialect); only the TS editor still has this problem, and it
+goes away when the TS editor is deleted.
 
 ## Running things for manual/browser testing
 
@@ -122,6 +155,7 @@ nix develop --command bash -c 'cd apps/hexend && cargo run'          # :4000
 nix develop --command bash -c 'bun run --cwd apps/editor dev'        # vite picks a free port
 nix develop --command bash -c 'bun run --cwd apps/presentation dev'  # same
 nix develop --command bash -c 'cd apps/presentation-rs && trunk serve' # :5175
+nix develop --command bash -c 'cd apps/editor-rs && trunk serve'       # :5176
 ```
 
 Editor: open the picker, paste the absolute path to a `.hexen.yml`
@@ -171,7 +205,7 @@ read-only, driven by whatever the editor does.
 ```
 nix develop --command bash -c 'bun run --filter "*" test'   # every TS workspace
 nix develop --command bash -c 'cargo test'                   # whole Cargo workspace
-nix develop --command bash -c 'cargo clippy -p presentation-rs --target wasm32-unknown-unknown'
+nix develop --command bash -c 'cargo clippy -p presentation-rs -p editor-rs --target wasm32-unknown-unknown'
 nix develop --command bash -c 'bun run typecheck'
 ```
 

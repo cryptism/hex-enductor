@@ -9,6 +9,7 @@
   "scripts": {
     "dev:hexend": "cargo run --manifest-path apps/hexend/Cargo.toml",
     "dev:editor": "bun run --cwd apps/editor dev",
+    "dev:editor-rs": "trunk serve --config apps/editor-rs/Trunk.toml",
     "dev:presentation": "bun run --cwd apps/presentation dev",
     "dev:presentation-rs": "trunk serve --config apps/presentation-rs/Trunk.toml",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit",

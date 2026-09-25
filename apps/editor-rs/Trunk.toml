@@ -1,0 +1,6 @@
+[build]
+target = "index.html"
+
+[serve]
+# apps/editor (vite) picks its own port while both exist.
+port = 5176

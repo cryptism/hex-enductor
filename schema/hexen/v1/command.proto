@@ -6,7 +6,9 @@ import "hexen/v1/grid.proto";
 import "hexen/v1/location.proto";
 
 // A partial Link — only the fields present are meant to change.
-// Mirrors LinkSchema.partial() in packages/hexen-schema.
+// Mirrors LinkSchema.partial() in packages/hexen-schema. `icon` and
+// `color` present but empty ("") clear the Link's own value, since
+// proto3 JSON can't express "set this optional field to null".
 message LinkPatch {
   optional string id = 1;
   optional string target = 2;

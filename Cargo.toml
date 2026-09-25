@@ -5,6 +5,7 @@
 resolver = "2"
 members = [
     "apps/hexend",
+    "apps/editor-rs",
     "apps/presentation-rs",
     "crates/hexen-proto",
     "crates/hexen-web",

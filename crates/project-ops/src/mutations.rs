@@ -100,11 +100,13 @@ pub fn save_link(
     if let Some(r#type) = patch.r#type {
         link.r#type = r#type;
     }
-    if patch.icon.is_some() {
-        link.icon = patch.icon;
+    // Absent = leave as is; an empty string = clear it (proto3 JSON
+    // has no way to say "set this optional field to null").
+    if let Some(icon) = patch.icon {
+        link.icon = (!icon.is_empty()).then_some(icon);
     }
-    if patch.color.is_some() {
-        link.color = patch.color;
+    if let Some(color) = patch.color {
+        link.color = (!color.is_empty()).then_some(color);
     }
     if let Some(hidden) = patch.hidden {
         link.hidden = Some(hidden);
@@ -321,6 +323,39 @@ mod tests {
         let link = &loc(&p, "town").links[0];
         assert_eq!((link.x, link.y, link.hidden), (9.0, 1.0, Some(true)));
         assert_eq!(link.r#type, "settlement");
+    }
+
+    #[test]
+    fn save_link_clears_icon_and_color_on_an_empty_string() {
+        let mut p = fixture();
+        let set = LinkPatch {
+            icon: Some("well".into()),
+            color: Some("#f00".into()),
+            ..Default::default()
+        };
+        save_link(&mut p, "town", "front-door", set).unwrap();
+        assert_eq!(loc(&p, "town").links[0].icon.as_deref(), Some("well"));
+
+        let untouched = LinkPatch {
+            x: Some(2.0),
+            ..Default::default()
+        };
+        save_link(&mut p, "town", "front-door", untouched).unwrap();
+        assert_eq!(loc(&p, "town").links[0].color.as_deref(), Some("#f00"));
+
+        let clear = LinkPatch {
+            icon: Some(String::new()),
+            color: Some(String::new()),
+            ..Default::default()
+        };
+        save_link(&mut p, "town", "front-door", clear).unwrap();
+        assert_eq!(
+            (
+                &loc(&p, "town").links[0].icon,
+                &loc(&p, "town").links[0].color
+            ),
+            (&None, &None)
+        );
     }
 
     #[test]
