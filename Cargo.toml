@@ -5,10 +5,10 @@
 resolver = "2"
 members = [
     "apps/desktop",
-    "apps/editor-rs",
+    "apps/editor",
     "apps/hexen-cli",
     "apps/hexend",
-    "apps/presentation-rs",
+    "apps/presentation",
     "crates/hexen-proto",
     "crates/hexen-web",
     "crates/map-core",
@@ -19,10 +19,10 @@ members = [
 # explicitly (`cargo build -p hex-enductor-desktop`, or `cargo tauri build`
 # in apps/desktop for installable bundles).
 default-members = [
-    "apps/editor-rs",
+    "apps/editor",
     "apps/hexen-cli",
     "apps/hexend",
-    "apps/presentation-rs",
+    "apps/presentation",
     "crates/hexen-proto",
     "crates/hexen-web",
     "crates/map-core",

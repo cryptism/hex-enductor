@@ -2,9 +2,9 @@
 //! image — independent of whatever terrain grid (hex/square/none) the
 //! Location has, since a map without a terrain grid can still have fog.
 //! Cell keys ("col,row") are opaque to the server; only this module and
-//! the map canvas need to know what they mean. Must stay byte-for-byte
-//! compatible with packages/map-core/src/fog.ts while the TS editor
-//! still writes these keys.
+//! the map canvas need to know what they mean. They're stored in
+//! project files, so changing the scheme (cell size, key format) would
+//! scramble every saved fog state.
 
 use std::collections::HashSet;
 

@@ -1,7 +1,7 @@
 //! The desktop shell. Everything interesting is in [`servers`]; this is
 //! the Tauri wiring around it:
 //!
-//! - one editor window, loading apps/editor-rs's build, with the local
+//! - one editor window, loading apps/editor's build, with the local
 //!   server's details injected as `window.__HEXEN_DESKTOP__` before any
 //!   of its code runs. The editor treats that global as its "running in
 //!   the desktop app" flag: it points itself at this server and shows

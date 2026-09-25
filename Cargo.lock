@@ -1153,7 +1153,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
-name = "editor-rs"
+name = "editor"
 version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
@@ -3653,7 +3653,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
-name = "presentation-rs"
+name = "presentation"
 version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",

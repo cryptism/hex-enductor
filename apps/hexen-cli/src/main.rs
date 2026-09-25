@@ -46,7 +46,7 @@ enum Command {
         dry_run: bool,
     },
     /// Convert a .hexen.yml written in the old "type:"-discriminated format
-    /// (the TypeScript tools') to the current one, in place. Files already
+    /// (written by the former TypeScript tools) to the current one, in place. Files already
     /// in the current format are left as they are.
     Migrate {
         project: PathBuf,

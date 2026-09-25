@@ -5,7 +5,7 @@ use protox::prost::Message;
 
 // protox is a pure-Rust protobuf compiler, so building this crate needs
 // no `protoc` on PATH — which also means it builds for wasm32 targets
-// (apps/presentation-rs) from any shell, nix devShell or not.
+// (apps/presentation) from any shell, nix devShell or not.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
     let schema_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("../../schema");

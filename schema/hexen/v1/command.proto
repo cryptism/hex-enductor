@@ -5,8 +5,7 @@ package hexen.v1;
 import "hexen/v1/grid.proto";
 import "hexen/v1/location.proto";
 
-// A partial Link — only the fields present are meant to change.
-// Mirrors LinkSchema.partial() in packages/hexen-schema. `icon` and
+// A partial Link — only the fields present are meant to change. `icon` and
 // `color` present but empty ("") clear the Link's own value, since
 // proto3 JSON can't express "set this optional field to null".
 message LinkPatch {
@@ -27,8 +26,7 @@ message SaveLinkCommand {
 }
 
 // A partial inline LocationContent — only title/body, since a command
-// can't change a location's content *type*. Mirrors
-// InlineLocationContentSchema.omit({type: true}).partial().
+// can't change a location's content *type*.
 message InlineContentPatch {
   optional string title = 1;
   optional string body = 2;
@@ -61,17 +59,17 @@ message AddLocationCommand {
 
 message SaveGridCommand {
   string location_id = 1;
-  // Absent means "clear the grid" — mirrors GridSchema.nullable().
+  // Absent means "clear the grid".
   Grid grid = 2;
 }
 
 message SaveImageCommand {
   string location_id = 1;
-  // Absent means "remove the image" — mirrors ImageRefSchema.nullable().
+  // Absent means "remove the image".
   ImageRef image = 2;
 }
 
-// Absent fog means "turn fog off" — mirrors FogOfWarSchema.nullable().
+// Absent fog means "turn fog off".
 // Present with no revealed cells starts fog with everything hidden.
 message SetFogCommand {
   string location_id = 1;

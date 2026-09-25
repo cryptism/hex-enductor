@@ -123,9 +123,8 @@ locations:
 
     #[test]
     fn rejects_the_old_type_discriminated_dialect() {
-        // What packages/hexen-schema (and the TS editor's local-folder
-        // storage) wrote — not readable here; see
-        // scripts/migrate-project-to-wire-format.ts.
+        // What the former TypeScript tools wrote — not readable here;
+        // `hexen migrate` (apps/hexen-cli) converts it.
         let old = "schemaVersion: 1\ntitle: T\ndefaultLocation: a\ncontent: { type: inline }\nlocations: []\n";
         assert!(parse_hexen_project(old).is_err());
     }

@@ -40,7 +40,7 @@ message Link {
 // revealed cells) means fog is on; absence means the map is fully
 // visible. Cell keys are opaque to the server — whatever addressing
 // scheme the client's fog overlay uses (see
-// packages/map-core/src/fog.ts) — so this message never needs to know
+// crates/map-core/src/fog.rs) — so this message never needs to know
 // the map's grid or image dimensions.
 message FogOfWar {
   repeated string revealed_cells = 1;

@@ -4,7 +4,7 @@
   "definitions": {
     "FogOfWar": {
       "additionalProperties": false,
-      "description": "A Location's fog-of-war state. Presence on a Location (even with no revealed cells) means fog is on; absence means the map is fully visible. Cell keys are opaque to the server — whatever addressing scheme the client's fog overlay uses (see packages/map-core/src/fog.ts) — so this message never needs to know the map's grid or image dimensions.",
+      "description": "A Location's fog-of-war state. Presence on a Location (even with no revealed cells) means fog is on; absence means the map is fully visible. Cell keys are opaque to the server — whatever addressing scheme the client's fog overlay uses (see crates/map-core/src/fog.rs) — so this message never needs to know the map's grid or image dimensions.",
       "properties": {
         "revealedCells": {
           "items": {
@@ -92,7 +92,7 @@
     },
     "HexGrid": {
       "additionalProperties": false,
-      "description": "A hex lattice calibrated by an origin plus two basis vectors — see packages/map-core/src/hexMath.ts for the math this feeds.",
+      "description": "A hex lattice calibrated by an origin plus two basis vectors — see crates/map-core/src/hex_math.rs for the math this feeds.",
       "properties": {
         "b1": {
           "anyOf": [

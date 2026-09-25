@@ -23,7 +23,7 @@ use serde::Serialize;
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
 
-/// apps/presentation-rs, built with `--public-url /presentation/` into
+/// apps/presentation, built with `--public-url /presentation/` into
 /// `presentation-dist/` (tauri.conf.json's beforeBuildCommand does it).
 #[derive(RustEmbed)]
 #[folder = "presentation-dist/"]
@@ -35,7 +35,7 @@ const LAN_PORT: u16 = 4747;
 
 async fn presentation_file(uri: Uri) -> Response {
     // strip_prefix, not trim_start_matches: the app's own files are
-    // named presentation-rs-*, and repeated trimming would eat that too.
+    // named presentation-<hash>.*, and repeated trimming would eat that too.
     let path = uri
         .path()
         .strip_prefix("/presentation")

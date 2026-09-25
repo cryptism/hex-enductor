@@ -1,9 +1,8 @@
 //! Generated from schema/hexen/v1/*.proto by build.rs (prost for the
-//! struct definitions, pbjson for protobuf's canonical JSON mapping —
-//! the same JSON convention packages/hexen-proto-ts's generated
-//! TypeScript speaks, so this is the one schema both sides read).
+//! struct definitions, pbjson for protobuf's canonical JSON mapping,
+//! which is also the .hexen.yml format on disk).
 //!
-//! Shared by apps/hexend (native) and apps/presentation-rs (wasm32), so
+//! Shared by apps/hexend (native) and apps/presentation (wasm32), so
 //! both ends of the /ws session serialize through the same types and
 //! there's no wireFormat.ts-style seam between them.
 

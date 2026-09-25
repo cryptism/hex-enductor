@@ -5,9 +5,9 @@
   "version": "0.0.0",
   "identifier": "net.cryptism.hex-enductor",
   "build": {
-    "frontendDist": "../editor-rs/dist",
+    "frontendDist": "../editor/dist",
     "beforeBuildCommand": {
-      "script": "trunk build --release --config ../editor-rs/Trunk.toml && trunk build --release --config ../presentation-rs/Trunk.toml --public-url /presentation/ --dist ../desktop/presentation-dist",
+      "script": "trunk build --release --config ../editor/Trunk.toml && trunk build --release --config ../presentation/Trunk.toml --public-url /presentation/ --dist ../desktop/presentation-dist",
       "cwd": "."
     }
   },
