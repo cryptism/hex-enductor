@@ -4,8 +4,8 @@ use hexen_proto::hexen::v1::{Location, OpenedProjectData};
 use leptos::prelude::*;
 use map_core::link_icons::find_link_icon;
 
-use crate::live_session::{self, LiveSession};
-use crate::map_canvas::MapCanvas;
+use hexen_web::live_session::{self, LiveSession};
+use hexen_web::map_canvas::MapCanvas;
 
 #[derive(Clone, PartialEq)]
 struct Target {

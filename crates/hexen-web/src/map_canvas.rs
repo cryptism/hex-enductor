@@ -1,7 +1,7 @@
-//! The map: base image, terrain grid, link pins, fog of war — the
-//! read-only subset of packages/map-core's `MapCanvas.tsx` (no Add
-//! Location placement, no fog painting; those come with the editor port),
-//! with no map library underneath.
+//! The map: base image, terrain grid, link pins, fog of war, plus the
+//! editor's two map tools (click-to-place and fog painting) — the port
+//! of packages/map-core's `MapCanvas.tsx`, with no map library
+//! underneath.
 //!
 //! Everything in image space — the image, the grid, the fog — is one
 //! `<svg>` whose content group is transformed by the current
@@ -16,7 +16,7 @@ use std::fmt::Write as _;
 use hexen_proto::hexen::v1::{grid, FogOfWar, Grid, ImageRef, Link};
 use leptos::html::Div;
 use leptos::prelude::*;
-use map_core::fog::{fog_cell_corners, hidden_fog_cells};
+use map_core::fog::{fog_cell_at, fog_cell_corners, hidden_fog_cells, FOG_CELL_SIZE};
 use map_core::fog_texture::{fog_noise_rgba, FOG_TEXTURE_SIZE};
 use map_core::hex_math::{build_hex_polygons, load_hex_basis};
 use map_core::link_icons::find_link_icon;
@@ -29,6 +29,14 @@ use wasm_bindgen::Clamped;
 const DEFAULT_MARKER_COLOR: &str = "#c19a5f";
 const FOG_PATTERN_ID: &str = "hexenductor-fog-noise";
 const FOG_OPACITY: f64 = 0.92;
+/// Held down while painting, the fog layer dims so the GM can see what
+/// they're about to re-cover instead of painting blind.
+const FOG_OPACITY_ERASING: f64 = 0.35;
+/// How often a held-down paint stroke flushes its touched cells as one
+/// setFogCells command — batched so a fast drag across many cells lands
+/// (and broadcasts to every other viewer) as a handful of updates, not
+/// one per cell.
+const FOG_PAINT_FLUSH_MS: i32 = 80;
 /// A pointer that moves less than this between down and up is a click
 /// (closes the open popup), not a pan.
 const CLICK_SLOP_PX: f64 = 4.0;
@@ -133,6 +141,39 @@ fn centroid_and_spread(pointers: &HashMap<i32, Point>) -> Option<(Point, f64)> {
     ))
 }
 
+/// A fog paint stroke in progress: its direction is decided once, at
+/// pointerdown (shift = restore fog), and the cells it has crossed
+/// since the last flush wait in `pending`.
+struct Stroke {
+    pointer_id: i32,
+    revealed: bool,
+    pending: Vec<String>,
+    last: Point,
+    interval: i32,
+    _tick: Closure<dyn FnMut()>,
+}
+
+/// Every fog cell a straight drag from `a` to `b` (image pixels) passes
+/// over — pointer events arrive far apart on a fast drag, so sampling
+/// only their positions would leave gaps in the stroke.
+fn cells_along(a: &Point, b: &Point) -> Vec<String> {
+    let steps = ((b.x - a.x).hypot(b.y - a.y) / (FOG_CELL_SIZE / 4.0))
+        .ceil()
+        .max(1.0) as usize;
+    let mut cells: Vec<String> = Vec::new();
+    for i in 1..=steps {
+        let t = i as f64 / steps as f64;
+        let cell = fog_cell_at(&Point {
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+        });
+        if cells.last() != Some(&cell) {
+            cells.push(cell);
+        }
+    }
+    cells
+}
+
 type Listeners = (
     web_sys::HtmlDivElement,
     Closure<dyn FnMut(web_sys::WheelEvent)>,
@@ -151,16 +192,90 @@ pub fn MapCanvas(
     #[prop(into)]
     link_titles: Signal<HashMap<String, String>>,
     #[prop(into)] selected_link_id: Signal<Option<String>>,
-    #[prop(into)] on_select_link: Callback<String>,
+    #[prop(optional, into)] on_select_link: Option<Callback<String>>,
     /// `None` means fog is off for this Location — nothing is drawn.
     #[prop(into)]
     fog: Signal<Option<FogOfWar>>,
+    /// Show the grid overlay at all — a view toggle, independent of whether `grid` itself is configured.
+    #[prop(into, default = true.into())]
+    grid_visible: Signal<bool>,
+    /// The Add Location tool: while true, a click (not a drag) on the map calls `on_place` with the image point.
+    #[prop(into, default = false.into())]
+    placing: Signal<bool>,
+    #[prop(optional, into)] on_place: Option<Callback<Point>>,
+    /// While true (and fog is present), click-drag paints fog cells instead of panning the map.
+    #[prop(into, default = false.into())]
+    fog_editable: Signal<bool>,
+    /// `(cells, revealed)` — one call per flushed batch of a stroke.
+    #[prop(optional, into)]
+    on_paint_fog_cells: Option<Callback<(Vec<String>, bool)>>,
 ) -> impl IntoView {
     let container = NodeRef::<Div>::new();
     let viewport = RwSignal::new(Viewport::default());
     let open_popup = RwSignal::new(None::<String>);
     let gesture = StoredValue::new_local(Gesture::default());
     let listeners = StoredValue::new_local(None::<Listeners>);
+    let stroke = StoredValue::new_local(None::<Stroke>);
+    let painting = Memo::new(move |_| {
+        fog_editable.get() && fog.with(Option::is_some) && on_paint_fog_cells.is_some()
+    });
+
+    let flush_stroke = move || {
+        let batch = stroke.try_update_value(|s| {
+            s.as_mut()
+                .map(|s| (std::mem::take(&mut s.pending), s.revealed))
+        });
+        if let (Some(Some((cells, revealed))), Some(on_paint)) = (batch, on_paint_fog_cells) {
+            if !cells.is_empty() {
+                on_paint.run((cells, revealed));
+            }
+        }
+    };
+    let end_stroke = move || {
+        flush_stroke();
+        if let Some(Some(s)) = stroke.try_update_value(Option::take) {
+            window().clear_interval_with_handle(s.interval);
+        }
+    };
+    // The tool being switched off mid-stroke still lands what was painted.
+    Effect::new(move |_| {
+        if !painting.get() {
+            end_stroke();
+        }
+    });
+
+    // Only tracked while the paint tool is armed — holding shift previews
+    // erase mode by dimming the fog layer, the same key a stroke reads to
+    // decide its direction.
+    let shift_held = RwSignal::new(false);
+    let key_listeners = StoredValue::new_local(None::<Closure<dyn FnMut(web_sys::KeyboardEvent)>>);
+    let detach_keys = move || {
+        if let Some(Some(on_key)) = key_listeners.try_update_value(Option::take) {
+            for event in ["keydown", "keyup"] {
+                let _ = window()
+                    .remove_event_listener_with_callback(event, on_key.as_ref().unchecked_ref());
+            }
+        }
+        shift_held.set(false);
+    };
+    Effect::new(move |_| {
+        detach_keys();
+        if !painting.get() {
+            return;
+        }
+        let on_key =
+            Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |e: web_sys::KeyboardEvent| {
+                if e.key() == "Shift" {
+                    shift_held.set(e.type_() == "keydown");
+                }
+            });
+        for event in ["keydown", "keyup"] {
+            window()
+                .add_event_listener_with_callback(event, on_key.as_ref().unchecked_ref())
+                .unwrap_throw();
+        }
+        key_listeners.set_value(Some(on_key));
+    });
 
     let container_rect = move || {
         container
@@ -242,6 +357,8 @@ pub fn MapCanvas(
     });
 
     on_cleanup(move || {
+        end_stroke();
+        detach_keys();
         if let Some((el, on_wheel, on_resize)) = listeners.try_update_value(Option::take).flatten()
         {
             let _ =
@@ -265,6 +382,30 @@ pub fn MapCanvas(
             let _ = el.set_pointer_capture(e.pointer_id());
         }
         let p = local_point(e.client_x(), e.client_y());
+
+        if painting.get_untracked() {
+            if stroke.with_value(Option::is_some) {
+                return; // a second finger doesn't start a second stroke
+            }
+            let at = viewport.with_untracked(|v| v.to_image(&p));
+            let tick = Closure::<dyn FnMut()>::new(flush_stroke);
+            let interval = window()
+                .set_interval_with_callback_and_timeout_and_arguments_0(
+                    tick.as_ref().unchecked_ref(),
+                    FOG_PAINT_FLUSH_MS,
+                )
+                .unwrap_throw();
+            stroke.set_value(Some(Stroke {
+                pointer_id: e.pointer_id(),
+                revealed: !e.shift_key(),
+                pending: vec![fog_cell_at(&at)],
+                last: at,
+                interval,
+                _tick: tick,
+            }));
+            return;
+        }
+
         gesture.update_value(|g| {
             if g.pointers.is_empty() {
                 g.travel = 0.0;
@@ -275,6 +416,20 @@ pub fn MapCanvas(
 
     let on_pointer_move = move |e: web_sys::PointerEvent| {
         let p = local_point(e.client_x(), e.client_y());
+        let painted = stroke.try_update_value(|s| {
+            let s = s.as_mut().filter(|s| s.pointer_id == e.pointer_id())?;
+            let at = viewport.with_untracked(|v| v.to_image(&p));
+            for cell in cells_along(&s.last, &at) {
+                if !s.pending.contains(&cell) {
+                    s.pending.push(cell);
+                }
+            }
+            s.last = at;
+            Some(())
+        });
+        if matches!(painted, Some(Some(()))) {
+            return;
+        }
         gesture.update_value(|g| {
             let Some(&prev) = g.pointers.get(&e.pointer_id()) else {
                 return;
@@ -297,15 +452,25 @@ pub fn MapCanvas(
     };
 
     let on_pointer_up = move |e: web_sys::PointerEvent| {
-        gesture.update_value(|g| {
-            if g.pointers.remove(&e.pointer_id()).is_some()
-                && g.pointers.is_empty()
-                && g.travel < CLICK_SLOP_PX
-            {
-                // A plain click on the map closes the open popup, as Leaflet did.
-                open_popup.set(None);
+        if stroke.with_value(|s| s.as_ref().is_some_and(|s| s.pointer_id == e.pointer_id())) {
+            end_stroke();
+            return;
+        }
+        let p = local_point(e.client_x(), e.client_y());
+        let clicked = gesture
+            .try_update_value(|g| {
+                g.pointers.remove(&e.pointer_id()).is_some()
+                    && g.pointers.is_empty()
+                    && g.travel < CLICK_SLOP_PX
+            })
+            .unwrap_or(false);
+        if clicked {
+            // A plain click on the map closes the open popup, as Leaflet did.
+            open_popup.set(None);
+            if let (true, Some(on_place)) = (placing.get_untracked(), on_place) {
+                on_place.run(viewport.with_untracked(|v| v.to_image(&p)));
             }
-        });
+        }
     };
 
     let zoom_by = move |delta: f64| {
@@ -395,7 +560,9 @@ pub fn MapCanvas(
                 style=style
                 on:click=move |_| {
                     open_popup.set(Some(id.clone()));
-                    on_select_link.run(id.clone());
+                    if let Some(on_select_link) = on_select_link {
+                        on_select_link.run(id.clone());
+                    }
                 }
                 inner_html=glyph
             ></div>
@@ -436,7 +603,15 @@ pub fn MapCanvas(
     view! {
         <div
             node_ref=container
-            class="map-canvas"
+            class=move || {
+                if painting.get() {
+                    "map-canvas painting-fog"
+                } else if placing.get() {
+                    "map-canvas placing"
+                } else {
+                    "map-canvas"
+                }
+            }
             on:pointerdown=on_pointer_down
             on:pointermove=on_pointer_move
             on:pointerup=on_pointer_up
@@ -460,7 +635,7 @@ pub fn MapCanvas(
                 <g transform=transform>
                     <image href=image_url width=width height=height preserveAspectRatio="none" />
                     <path
-                        d=move || grid_d.get()
+                        d=move || if grid_visible.get() { grid_d.get() } else { String::new() }
                         fill="none"
                         stroke=move || grid_style.get().0
                         stroke-width=move || grid_style.get().1
@@ -470,7 +645,7 @@ pub fn MapCanvas(
                     <path
                         d=move || fog_d.get().unwrap_or_default()
                         fill=format!("url(#{FOG_PATTERN_ID})")
-                        fill-opacity=FOG_OPACITY
+                        fill-opacity=move || if shift_held.get() { FOG_OPACITY_ERASING } else { FOG_OPACITY }
                     />
                 </g>
             </svg>
@@ -488,5 +663,24 @@ pub fn MapCanvas(
                 </button>
             </div>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_fast_drag_covers_every_cell_it_crosses() {
+        let cells = cells_along(&Point { x: 10.0, y: 10.0 }, &Point { x: 250.0, y: 10.0 });
+        assert_eq!(cells, ["0,0", "1,0", "2,0", "3,0"]);
+    }
+
+    #[test]
+    fn a_diagonal_drag_steps_through_neighbouring_cells() {
+        let cells = cells_along(&Point { x: 10.0, y: 10.0 }, &Point { x: 140.0, y: 140.0 });
+        assert_eq!(cells.first().map(String::as_str), Some("0,0"));
+        assert_eq!(cells.last().map(String::as_str), Some("2,2"));
+        assert!(cells.contains(&"1,1".to_string()));
     }
 }

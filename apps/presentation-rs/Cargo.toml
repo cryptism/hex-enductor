@@ -8,35 +8,11 @@ description = "Read-only live view of a hexend project session — the Leptos po
 [dependencies]
 hexen-proto = { path = "../../crates/hexen-proto" }
 map-core = { path = "../../crates/map-core" }
+hexen-web = { path = "../../crates/hexen-web" }
 leptos = { version = "0.8", features = ["csr"] }
-# Pinned to the wasm-bindgen-cli the flake's nixpkgs ships
-# (wasm-bindgen-cli_0_2_127) — trunk needs the CLI and this crate to
-# match exactly, and a trunk-downloaded CLI binary won't run on NixOS.
-wasm-bindgen = "=0.2.127"
 js-sys = "0.3"
-serde_json = "1"
 console_error_panic_hook = "0.1"
 
 [dependencies.web-sys]
 version = "0.3"
-features = [
-    "AddEventListenerOptions",
-    "CanvasRenderingContext2d",
-    "DomRect",
-    "CloseEvent",
-    "Document",
-    "Element",
-    "Event",
-    "HtmlCanvasElement",
-    "HtmlDivElement",
-    "HtmlElement",
-    "ImageData",
-    "KeyboardEvent",
-    "Location",
-    "MessageEvent",
-    "PointerEvent",
-    "UrlSearchParams",
-    "WebSocket",
-    "WheelEvent",
-    "Window",
-]
+features = ["Location", "UrlSearchParams", "Window"]

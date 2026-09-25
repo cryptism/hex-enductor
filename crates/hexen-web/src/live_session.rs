@@ -1,12 +1,17 @@
-//! A read-only connection to one project's session on hexend's /ws —
-//! the Rust counterpart of packages/live-session's `connectLiveSession`,
-//! minus execute/undo/redo, which nothing here sends yet (the editor
-//! port will add them). hexend is authoritative: every state, the first
-//! included, arrives as a `ServerMessage`, parsed with the same
-//! pbjson-generated types hexend serializes it with — so unlike the TS
-//! client there's no wire-format conversion step to keep in sync.
+//! A connection to one project's session on hexend's /ws — the Rust
+//! counterpart of packages/live-session's `connectLiveSession`. hexend
+//! is authoritative: every state, the first included, arrives as a
+//! `ServerMessage`, parsed with the same pbjson-generated types hexend
+//! serializes it with — so unlike the TS client there's no wire-format
+//! conversion step to keep in sync. A client never applies its own
+//! command locally; it sends it and waits to be told what happened.
+//!
+//! A read-only consumer (the presentation app) is this same type, just
+//! never calling `execute`/`undo`/`redo`.
 
-use hexen_proto::hexen::v1::{OpenedProjectData, ServerMessage};
+use hexen_proto::hexen::v1::{
+    client_message, ClientMessage, Command, OpenedProjectData, Redo, ServerMessage, Undo,
+};
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
 
@@ -16,6 +21,28 @@ pub struct LiveSession {
     socket: WebSocket,
     _on_message: Closure<dyn FnMut(MessageEvent)>,
     _on_failure: Closure<dyn FnMut(web_sys::Event)>,
+}
+
+impl LiveSession {
+    pub fn execute(&self, command: Command) {
+        self.send(client_message::Kind::Command(command));
+    }
+
+    pub fn undo(&self) {
+        self.send(client_message::Kind::Undo(Undo {}));
+    }
+
+    pub fn redo(&self) {
+        self.send(client_message::Kind::Redo(Redo {}));
+    }
+
+    fn send(&self, kind: client_message::Kind) {
+        let message = ClientMessage { kind: Some(kind) };
+        let text = serde_json::to_string(&message).expect("ClientMessage always serializes");
+        if let Err(err) = self.socket.send_with_str(&text) {
+            web_sys::console::error_1(&err);
+        }
+    }
 }
 
 impl Drop for LiveSession {
