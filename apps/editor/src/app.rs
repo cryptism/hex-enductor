@@ -46,6 +46,13 @@ pub fn App() -> impl IntoView {
     };
     provide_context(ctx);
 
+    // "?path=…" (with an optional "?server=…", see http.rs) opens a server
+    // project straight from the URL — how `hexen launch` opens its tab.
+    // Once, at startup; closing that project later doesn't reopen it.
+    if let Some(path) = crate::http::query_param("path") {
+        ctx.open_server_project(path);
+    }
+
     // Keyed on each open (not just on "is something open"), so switching
     // projects tears the old editor — and its connection — down.
     let generation = Memo::new(move |previous: Option<&u64>| {

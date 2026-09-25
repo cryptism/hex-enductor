@@ -9,7 +9,7 @@ mod server;
 
 use std::rc::Rc;
 
-use hexen_proto::hexen::v1::{Command, OpenedProjectData};
+use hexen_proto::hexen::v1::{Command, OpenedProjectData, Ping};
 use web_sys::FileSystemDirectoryHandle;
 
 pub use local_fs::{request_readwrite, show_directory_picker, supports_local_fs, LocalFsStorage};
@@ -17,6 +17,8 @@ pub use server::ServerStorage;
 
 pub type OnUpdate = Rc<dyn Fn(OpenedProjectData)>;
 pub type OnError = Rc<dyn Fn(String)>;
+/// A ping from anyone on the session, this client included.
+pub type OnPing = Rc<dyn Fn(Ping)>;
 
 /// What to open — kept by the app between opens, and what a project's
 /// editor is keyed on.
@@ -50,10 +52,15 @@ impl Drop for ImageUrl {
 }
 
 impl Storage {
-    pub fn connect(source: &Source, on_update: OnUpdate, on_error: OnError) -> Storage {
+    pub fn connect(
+        source: &Source,
+        on_update: OnUpdate,
+        on_ping: OnPing,
+        on_error: OnError,
+    ) -> Storage {
         match source {
             Source::Server(path) => {
-                Storage::Server(ServerStorage::connect(path, on_update, on_error))
+                Storage::Server(ServerStorage::connect(path, on_update, on_ping, on_error))
             }
             Source::Folder(dir) => {
                 Storage::Local(LocalFsStorage::connect(dir.clone(), on_update, on_error))
@@ -65,6 +72,21 @@ impl Storage {
         match self {
             Storage::Server(s) => s.execute(command),
             Storage::Local(s) => s.execute(command),
+        }
+    }
+
+    /// Ephemeral, never touches the project. A no-op for a browser
+    /// folder, which has no session to broadcast over.
+    pub fn ping(&self, location_id: &str, x: f64, y: f64) {
+        if let Storage::Server(s) = self {
+            s.ping(location_id, x, y);
+        }
+    }
+
+    /// Follow mode: this map's view. A no-op for a browser folder.
+    pub fn follow_view(&self, location_id: &str, x: f64, y: f64, zoom: f64) {
+        if let Storage::Server(s) = self {
+            s.follow_view(location_id, x, y, zoom);
         }
     }
 

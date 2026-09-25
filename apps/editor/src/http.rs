@@ -8,15 +8,27 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, Response};
 
 /// Where hexend is: the desktop app's own server when running inside
-/// it, otherwise baked in at build time (`HEXEND_URL=... trunk build`).
+/// it; else a `?server=` in this page's URL (how `hexen launch` points
+/// the editor at a hexend on another port); else baked in at build time
+/// (`HEXEND_URL=... trunk build`).
 pub fn server_url() -> String {
     crate::desktop::desktop_info()
         .map(|info| info.server_url)
+        .or_else(|| query_param("server"))
         .unwrap_or_else(|| {
             option_env!("HEXEND_URL")
                 .unwrap_or("http://localhost:4000")
                 .to_string()
         })
+}
+
+/// A non-empty query parameter from this page's URL.
+pub fn query_param(name: &str) -> Option<String> {
+    let search = web_sys::window()?.location().search().ok()?;
+    web_sys::UrlSearchParams::new_with_str(&search)
+        .ok()?
+        .get(name)
+        .filter(|v| !v.is_empty())
 }
 
 pub fn encode(s: &str) -> String {

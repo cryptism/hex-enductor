@@ -3,6 +3,7 @@
 //! `cargo run -p hexen-cli -- <command> --help`.
 
 mod icons;
+mod launch;
 mod migrate;
 mod obsidian;
 mod schema;
@@ -61,6 +62,20 @@ enum Command {
         #[arg(long, default_value = "crates/map-core/src/link_icons.rs")]
         out: PathBuf,
     },
+    /// Start hexend, the editor and the presentation view, and open a browser
+    /// tab for each already pointed at PROJECT. Ctrl+C stops everything.
+    Launch {
+        project: PathBuf,
+        #[arg(long, default_value_t = 4000)]
+        hexend_port: u16,
+        #[arg(long, default_value_t = 5173)]
+        editor_port: u16,
+        #[arg(long, default_value_t = 5174)]
+        presentation_port: u16,
+        /// Just print the URLs.
+        #[arg(long)]
+        no_browser: bool,
+    },
     /// Regenerate docs/hexen.schema.json — a JSON Schema for .hexen.yml,
     /// derived from schema/hexen/v1/*.proto — for editor completion via
     /// `# yaml-language-server: $schema=...`.
@@ -82,6 +97,21 @@ fn run(command: Command) -> Result<(), String> {
         Command::Migrate { project, dry_run } => migrate::run(&project, dry_run),
         Command::SyncLinkIcons { out } => icons::sync(&out),
         Command::Schema { out } => schema::write(&out),
+        Command::Launch {
+            project,
+            hexend_port,
+            editor_port,
+            presentation_port,
+            no_browser,
+        } => launch::run(
+            &project,
+            launch::Ports {
+                hexend: hexend_port,
+                editor: editor_port,
+                presentation: presentation_port,
+            },
+            !no_browser,
+        ),
     }
 }
 

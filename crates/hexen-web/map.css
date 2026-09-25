@@ -115,3 +115,54 @@
 .map-canvas.painting-fog:active {
   cursor: crosshair;
 }
+
+/* A ping: a dot plus three rings radiating out of it, 0.35s apart. */
+
+.map-ping {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.map-ping-dot {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.map-ping-ring {
+  position: absolute;
+  left: -20px;
+  top: -20px;
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  box-sizing: border-box;
+  opacity: 0;
+  animation: map-ping 1.3s ease-out forwards;
+}
+
+.map-ping-ring:nth-of-type(3) {
+  animation-delay: 0.35s;
+}
+
+.map-ping-ring:nth-of-type(4) {
+  animation-delay: 0.7s;
+}
+
+@keyframes map-ping {
+  from {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}

@@ -11,7 +11,10 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::mutations::MutationError;
 use project_ops::history::History;
-use crate::pb::hexen::v1::{location_content, Command, HexenProject, OpenedProjectData, ResolvedContent, ServerMessage};
+use crate::pb::hexen::v1::{
+    location_content, server_message, Command, FollowView, HexenProject, OpenedProjectData, Ping, ResolvedContent,
+    ServerMessage,
+};
 use crate::project_io::{open_project, save_project, OpenError};
 use crate::resolver::resolve_inline_content;
 
@@ -135,14 +138,33 @@ fn persist(session: &ProjectSession) {
     });
 }
 
-fn broadcast(session: &ProjectSession) {
-    let message = ServerMessage {
-        state: Some(session_state(session)),
-    };
+fn broadcast_message(session: &ProjectSession, message: ServerMessage) {
     let text = serde_json::to_string(&message).expect("ServerMessage always serializes");
     for tx in session.sockets.values() {
         let _ = tx.send(Message::Text(text.clone()));
     }
+}
+
+fn broadcast(session: &ProjectSession) {
+    broadcast_message(
+        session,
+        ServerMessage {
+            kind: Some(server_message::Kind::State(session_state(session))),
+        },
+    );
+}
+
+/// Ephemeral — re-broadcast verbatim to every socket watching this
+/// session, sender included. Never touches `session.project`, never
+/// persisted, no undo/redo entry.
+pub fn broadcast_ping(session: &ProjectSession, ping: Ping) {
+    broadcast_message(session, ServerMessage { kind: Some(server_message::Kind::Ping(ping)) });
+}
+
+/// Just as ephemeral as broadcast_ping — the GM's own map view,
+/// re-broadcast verbatim while Follow mode is on.
+pub fn broadcast_follow_view(session: &ProjectSession, view: FollowView) {
+    broadcast_message(session, ServerMessage { kind: Some(server_message::Kind::FollowView(view)) });
 }
 
 fn settle(session: &mut ProjectSession, project: HexenProject) {

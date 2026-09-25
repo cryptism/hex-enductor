@@ -4,9 +4,9 @@
 use std::rc::Rc;
 
 use hexen_proto::hexen::v1::{command, Command, ImageRef, SaveImageCommand};
-use hexen_web::live_session::{self, LiveSession};
+use hexen_web::live_session::{self, Event, LiveSession};
 
-use super::{dirname, image_extension, OnError, OnUpdate, UNSUPPORTED_IMAGE};
+use super::{dirname, image_extension, OnError, OnPing, OnUpdate, UNSUPPORTED_IMAGE};
 use crate::http::{encode, fetch_text, server_url};
 
 pub struct ServerStorage {
@@ -15,18 +15,28 @@ pub struct ServerStorage {
 }
 
 impl ServerStorage {
-    pub fn connect(path: &str, on_update: OnUpdate, on_error: OnError) -> Rc<Self> {
-        let session =
-            match live_session::connect(&server_url(), path, move |data| on_update(data), {
-                let on_error = on_error.clone();
-                move |err| on_error(err)
-            }) {
-                Ok(session) => Some(session),
-                Err(err) => {
-                    on_error(err);
-                    None
-                }
-            };
+    pub fn connect(
+        path: &str,
+        on_update: OnUpdate,
+        on_ping: OnPing,
+        on_error: OnError,
+    ) -> Rc<Self> {
+        let on_event = move |event| match event {
+            Event::State(data) => on_update(data),
+            Event::Ping(ping) => on_ping(ping),
+            // Follow mode is led from here, never followed.
+            Event::FollowView(_) => {}
+        };
+        let session = match live_session::connect(&server_url(), path, on_event, {
+            let on_error = on_error.clone();
+            move |err| on_error(err)
+        }) {
+            Ok(session) => Some(session),
+            Err(err) => {
+                on_error(err);
+                None
+            }
+        };
         Rc::new(ServerStorage {
             path: path.to_owned(),
             session,
@@ -36,6 +46,18 @@ impl ServerStorage {
     pub fn execute(&self, command: Command) {
         if let Some(s) = &self.session {
             s.execute(command);
+        }
+    }
+
+    pub fn ping(&self, location_id: &str, x: f64, y: f64) {
+        if let Some(s) = &self.session {
+            s.ping(location_id, x, y);
+        }
+    }
+
+    pub fn follow_view(&self, location_id: &str, x: f64, y: f64, zoom: f64) {
+        if let Some(s) = &self.session {
+            s.follow_view(location_id, x, y, zoom);
         }
     }
 

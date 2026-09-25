@@ -74,6 +74,26 @@ impl Viewport {
         }
     }
 
+    /// The image point at the centre of a `container_w`×`container_h`
+    /// container — what Follow mode reports.
+    pub fn center(&self, container_w: f64, container_h: f64) -> Point {
+        self.to_image(&pt(container_w / 2.0, container_h / 2.0))
+    }
+
+    /// The view with image point `center` in the middle of the container,
+    /// at `zoom` (clamped) — what Follow mode applies.
+    pub fn centered_on(center: &Point, zoom: f64, container_w: f64, container_h: f64) -> Viewport {
+        let zoom = zoom.clamp(MIN_ZOOM, MAX_ZOOM);
+        let s = zoom.exp2();
+        Viewport {
+            zoom,
+            offset: pt(
+                container_w / 2.0 - center.x * s,
+                container_h / 2.0 - center.y * s,
+            ),
+        }
+    }
+
     pub fn pan_by(&self, dx: f64, dy: f64) -> Viewport {
         Viewport {
             zoom: self.zoom,
@@ -151,6 +171,17 @@ mod tests {
         assert!((wheel_zoom_delta(100.0) + 1.08).abs() < 0.01);
         assert!(wheel_zoom_delta(-1e6) <= 4.0);
         assert_eq!(wheel_zoom_delta(0.0), 0.0);
+    }
+
+    #[test]
+    fn centered_on_and_center_round_trip() {
+        let v = Viewport::centered_on(&pt(120.0, 80.0), 1.25, 800.0, 600.0);
+        assert!(close(&v.center(800.0, 600.0), &pt(120.0, 80.0)));
+        assert_eq!(v.zoom, 1.25);
+        assert_eq!(
+            Viewport::centered_on(&pt(0.0, 0.0), 50.0, 1.0, 1.0).zoom,
+            MAX_ZOOM
+        );
     }
 
     #[test]

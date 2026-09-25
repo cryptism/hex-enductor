@@ -37,6 +37,13 @@ The deploy is hand-rolled in Cloudflare rather than something CI keeps in lockst
 Everything is Rust: one Cargo workspace, with the two browser apps built to WebAssembly by [trunk](https://trunkrs.dev). `nix develop` provides the toolchain (see `flake.nix`); otherwise you need `rustc`/`cargo` with the `wasm32-unknown-unknown` target, `trunk`, and `wasm-bindgen-cli` 0.2.127.
 
 ```sh
+# all three at once, opened in your browser on the given project
+cargo run -p hexen-cli -- launch examples/demo/demo.hexen.yml
+```
+
+Or one at a time:
+
+```sh
 # the server, on http://localhost:4000
 cd apps/hexend && cargo run
 
@@ -78,9 +85,9 @@ Take a look at `examples/demo` to show how it works at present — its `notice-b
 | `crates/hexen-web` | The map component and the live-session client, shared by the editor and presentation apps. |
 | `apps/hexend` | The local server — opens a .hexen.yml file, serves map images, and pushes live state to every connected client over its `/ws` session. |
 | `apps/editor` | The GM-facing app — open a project (from the server, or straight from a folder in the browser), click a pin, edit it. In GM mode it also controls fog of war. |
-| `apps/presentation` | A read-only display for a second monitor/projector — follows the editor's live state, fog included. |
+| `apps/presentation` | A read-only display for a second monitor/projector — follows the editor's live state, fog included, plus the GM's pings and (in Follow mode) view. |
 | `apps/desktop` | All of the above as one desktop app. |
-| `apps/hexen-cli` | `hexen`: Obsidian import, format migration, and regenerating the link icons and JSON Schema. |
+| `apps/hexen-cli` | `hexen`: `hexen launch` (server + both apps in one go), Obsidian import, format migration, and regenerating the link icons and JSON Schema. |
 
 ## License
 

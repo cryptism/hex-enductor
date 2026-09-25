@@ -21,6 +21,15 @@ pub struct UiState {
     /// The fog paint tool's armed state; only meaningful with both
     /// `edit_mode` and `gm_mode` on.
     pub painting_fog: bool,
+    /// The Ping tool's armed state — GM mode alone, not edit mode, since
+    /// a ping never touches project state. Stays armed after use, more
+    /// a laser pointer you switch on and off than a one-shot placement.
+    pub pinging: bool,
+    /// Another GM-mode sub-mode: while on, every pan/zoom of this map is
+    /// broadcast and the presentation view follows it. Doesn't hijack
+    /// clicks like the tools do, so it survives switching location —
+    /// on until switched off.
+    pub follow_mode: bool,
     /// A view toggle, not a safety gate — carries across projects and
     /// locations rather than resetting.
     pub grid_visible: bool,
@@ -37,6 +46,8 @@ impl Default for UiState {
             edit_mode: false,
             gm_mode: false,
             painting_fog: false,
+            pinging: false,
+            follow_mode: false,
             grid_visible: true,
             placing_location: false,
         }
@@ -58,6 +69,7 @@ impl UiState {
         self.selected_link_id = None;
         self.placing_location = false;
         self.painting_fog = false;
+        self.pinging = false;
     }
 
     pub fn select_link(&mut self, id: Option<String>) {
@@ -74,11 +86,25 @@ impl UiState {
     pub fn set_gm_mode(&mut self, gm_mode: bool) {
         self.gm_mode = gm_mode;
         self.painting_fog = false;
+        self.pinging = false;
+        self.follow_mode = false;
     }
 
     pub fn set_painting_fog(&mut self, painting_fog: bool) {
         self.painting_fog = painting_fog;
         self.selected_link_id = None;
+        self.pinging = false;
+    }
+
+    pub fn set_pinging(&mut self, pinging: bool) {
+        self.pinging = pinging;
+        self.selected_link_id = None;
+        self.placing_location = false;
+        self.painting_fog = false;
+    }
+
+    pub fn set_follow_mode(&mut self, follow_mode: bool) {
+        self.follow_mode = follow_mode;
     }
 
     pub fn set_grid_visible(&mut self, grid_visible: bool) {
@@ -88,6 +114,7 @@ impl UiState {
     pub fn set_placing_location(&mut self, placing_location: bool) {
         self.placing_location = placing_location;
         self.selected_link_id = None;
+        self.pinging = false;
     }
 }
 
@@ -206,6 +233,98 @@ mod tests {
         s.set_grid_visible(false);
         s.open_project();
         assert!(!s.grid_visible);
+    }
+
+    #[test]
+    fn ping_starts_disarmed_and_needs_only_gm_mode() {
+        let mut s = UiState::default();
+        assert!(!s.pinging);
+        s.set_edit_mode(false);
+        s.set_gm_mode(true);
+        s.set_pinging(true);
+        assert!(!s.edit_mode && s.pinging);
+    }
+
+    #[test]
+    fn turning_off_gm_mode_disarms_ping_and_disables_follow() {
+        let mut s = UiState::default();
+        s.set_gm_mode(true);
+        s.set_pinging(true);
+        s.set_follow_mode(true);
+        s.set_gm_mode(false);
+        assert!(!s.pinging && !s.follow_mode);
+    }
+
+    #[test]
+    fn ping_and_fog_painting_disarm_each_other() {
+        let mut s = UiState::default();
+        s.set_gm_mode(true);
+        s.set_edit_mode(true);
+        s.set_pinging(true);
+        s.set_painting_fog(true);
+        assert!(!s.pinging);
+        s.set_pinging(true);
+        assert!(!s.painting_fog);
+    }
+
+    #[test]
+    fn arming_add_location_disarms_ping() {
+        let mut s = UiState::default();
+        s.set_gm_mode(true);
+        s.set_edit_mode(true);
+        s.set_pinging(true);
+        s.set_placing_location(true);
+        assert!(!s.pinging);
+    }
+
+    #[test]
+    fn switching_location_disarms_ping() {
+        let mut s = UiState::default();
+        s.set_gm_mode(true);
+        s.set_pinging(true);
+        s.set_current_location(Some("inn".into()));
+        assert!(!s.pinging);
+    }
+
+    #[test]
+    fn follow_mode_starts_off_and_needs_only_gm_mode() {
+        let mut s = UiState::default();
+        assert!(!s.follow_mode);
+        s.set_edit_mode(false);
+        s.set_gm_mode(true);
+        s.set_follow_mode(true);
+        assert!(!s.edit_mode && s.follow_mode);
+    }
+
+    #[test]
+    fn follow_mode_survives_switching_location() {
+        let mut s = UiState::default();
+        s.set_gm_mode(true);
+        s.set_follow_mode(true);
+        s.set_current_location(Some("inn".into()));
+        assert!(s.follow_mode);
+    }
+
+    #[test]
+    fn follow_mode_and_the_tools_leave_each_other_alone() {
+        let mut s = UiState::default();
+        s.set_gm_mode(true);
+        s.set_edit_mode(true);
+        s.set_follow_mode(true);
+        s.set_pinging(true);
+        assert!(s.follow_mode);
+        s.set_painting_fog(true);
+        assert!(s.follow_mode);
+    }
+
+    #[test]
+    fn opening_a_project_resets_ping_and_follow() {
+        let mut s = UiState::default();
+        s.set_gm_mode(true);
+        s.set_follow_mode(true);
+        s.set_pinging(true);
+        s.open_project();
+        assert!(!s.pinging && !s.follow_mode);
     }
 
     #[test]

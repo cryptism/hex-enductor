@@ -126,6 +126,16 @@ body {
   color: var(--dim);
 }
 
+.fog-status-prominent {
+  margin: 0 0 0.8rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--accent);
+}
+
 .fog-layer-toggle {
   position: static;
   display: flex;
@@ -186,6 +196,11 @@ body {
   cursor: pointer;
   font-size: 0.8em;
   color: var(--dim);
+}
+
+.mode-toggle.sub-mode {
+  margin-left: 1.2rem;
+  font-size: 0.75em;
 }
 
 .mode-toggle input {

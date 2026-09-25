@@ -7,19 +7,20 @@ use std::rc::Rc;
 
 use hexen_proto::hexen::v1::{
     command, location_content, AddLocationCommand, AddLocationLinkCommand, Command, FogOfWar, Grid,
-    OpenedProjectData, Point, SaveGridCommand, SaveImageCommand, SaveLinkCommand,
+    OpenedProjectData, Ping, Point, SaveGridCommand, SaveImageCommand, SaveLinkCommand,
     SaveLocationContentCommand, SetFogCellsCommand, SetFogCommand,
 };
-use hexen_web::map_canvas::MapCanvas;
+use hexen_web::map_canvas::{MapCanvas, MapView, PingMark, PING_EFFECT_DURATION_MS};
 use leptos::html::Input;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use map_core::link_icons::find_link_icon;
+use std::time::Duration;
 
 use crate::about::AboutModal;
 use crate::app::use_app;
 use crate::desktop::is_desktop;
-use crate::fog_controls::FogControls;
+use crate::fog_controls::{FogControls, FogStatusLine};
 use crate::forms::{AddLocationForm, ConfigureGridForm, LinkForm, LocationContentForm};
 use crate::location_browser::LocationBrowser;
 use crate::logo::{LoadingScreen, Logo};
@@ -58,6 +59,12 @@ pub fn Editor() -> impl IntoView {
 
     // Every state change — this storage's own commands settling, or
     // (server) another connected client's — arrives here.
+    // Driven entirely by the session's pings, never set on click: hexend
+    // re-broadcasts a ping to its sender too, so this one path shows this
+    // window's own pings and everyone else's. Only shown on the map it
+    // was aimed at.
+    let ping_at = RwSignal::new(None::<PingMark>);
+    let ping_key = StoredValue::new(0u64);
     let storage = Storage::connect(
         &source,
         Rc::new(move |d| {
@@ -67,6 +74,32 @@ pub fn Editor() -> impl IntoView {
             saving_content.set(false);
             adding_location.set(false);
             saving_grid.set(false);
+        }),
+        Rc::new(move |ping: Ping| {
+            if ui.with_untracked(|u| {
+                u.current_location_id.as_deref() != Some(ping.location_id.as_str())
+            }) {
+                return;
+            }
+            ping_key.update_value(|k| *k += 1);
+            let key = ping_key.get_value();
+            ping_at.set(Some(PingMark {
+                x: ping.x,
+                y: ping.y,
+                key,
+            }));
+            set_timeout(
+                move || {
+                    if ping_at
+                        .try_get_untracked()
+                        .flatten()
+                        .is_some_and(|p| p.key == key)
+                    {
+                        ping_at.set(None);
+                    }
+                },
+                Duration::from_millis(PING_EFFECT_DURATION_MS),
+            );
         }),
         Rc::new(move |err| {
             if data.with_untracked(Option::is_none) {
@@ -97,6 +130,8 @@ pub fn Editor() -> impl IntoView {
     let painting_fog = Memo::new(move |_| ui.with(|u| u.painting_fog));
     let grid_visible = Memo::new(move |_| ui.with(|u| u.grid_visible));
     let placing_location = Memo::new(move |_| ui.with(|u| u.placing_location));
+    let pinging = Memo::new(move |_| ui.with(|u| u.pinging));
+    let follow_mode = Memo::new(move |_| ui.with(|u| u.follow_mode));
     let set_location = move |id: String| ui.update(|u| u.set_current_location(Some(id)));
 
     // Default to the project's defaultLocation once it loads.
@@ -262,7 +297,6 @@ pub fn Editor() -> impl IntoView {
         (gm_mode.get() && has_image.get()).then(|| {
             view! {
                 <FogControls
-                    image=Signal::derive(move || image.get().unwrap_or_default())
                     fog=Signal::derive(move || location.with(|l| l.as_ref().and_then(|l| l.fog.clone())))
                     edit_mode
                     layer_visible=fog_layer_visible
@@ -453,6 +487,14 @@ pub fn Editor() -> impl IntoView {
                     {move || project.with(|p| p.as_ref().map(|p| p.title.clone()).unwrap_or_default())}
                 </button>
             </div>
+
+            <Show when=move || gm_mode.get() && has_image.get()>
+                <FogStatusLine
+                    image=Signal::derive(move || image.get().unwrap_or_default())
+                    fog=Signal::derive(move || location.with(|l| l.as_ref().and_then(|l| l.fog.clone())))
+                />
+            </Show>
+
             <button type="button" class="link-button sidebar-spaced" on:click=move |_| browser_open.set(true)>
                 "Browse all locations…"
             </button>
@@ -472,7 +514,7 @@ pub fn Editor() -> impl IntoView {
                     on:change=move |ev| ui.update(|u| u.set_edit_mode(event_target_checked(&ev)))
                 />
                 <span class="mode-toggle-track" aria-hidden="true"></span>
-                <span class="mode-toggle-label">{move || if edit_mode.get() { "Editing" } else { "Viewing" }}</span>
+                <span class="mode-toggle-label">{move || if edit_mode.get() { "Edit mode on" } else { "Edit mode off" }}</span>
             </label>
 
             <label class="mode-toggle">
@@ -486,6 +528,33 @@ pub fn Editor() -> impl IntoView {
                     {move || if gm_mode.get() { "GM mode on" } else { "GM mode off" }}
                 </span>
             </label>
+
+            <Show when=move || gm_mode.get()>
+                <label class="mode-toggle sub-mode">
+                    <input
+                        type="checkbox"
+                        prop:checked=follow_mode
+                        on:change=move |ev| ui.update(|u| u.set_follow_mode(event_target_checked(&ev)))
+                    />
+                    <span class="mode-toggle-track" aria-hidden="true"></span>
+                    <span class="mode-toggle-label">
+                        {move || if follow_mode.get() { "Follow mode on" } else { "Follow mode off" }}
+                    </span>
+                </label>
+            </Show>
+
+            <Show when=move || gm_mode.get() && has_image.get()>
+                <button
+                    type="button"
+                    class=move || if pinging.get() { "tool-button active" } else { "tool-button" }
+                    on:click=move |_| ui.update(|u| {
+                        let armed = !u.pinging;
+                        u.set_pinging(armed);
+                    })
+                >
+                    {move || if pinging.get() { "Click the map to ping…" } else { "Ping" }}
+                </button>
+            </Show>
 
             {fog_controls}
 
@@ -604,6 +673,16 @@ pub fn Editor() -> impl IntoView {
                             cells,
                             revealed,
                         }))
+                    })
+                    pinging
+                    on_ping=Callback::new(move |p: Point| {
+                        storage.with_value(|s| s.ping(&location_id.get_untracked(), p.x, p.y))
+                    })
+                    ping_at
+                    on_view_change=Callback::new(move |v: MapView| {
+                        if follow_mode.get_untracked() {
+                            storage.with_value(|s| s.follow_view(&location_id.get_untracked(), v.x, v.y, v.zoom))
+                        }
                     })
                 />
                 <label class="grid-toggle">

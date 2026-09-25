@@ -129,11 +129,33 @@ windows and, opt-in, the LAN.
 - The presentation app is purely read-only: it renders `location.fog`
   like any other state. Don't add GM controls there; they'd duplicate
   `fog_controls.rs`.
-- **Known rough edge:** pins are HTML over the map's SVG, so they stay
-  visible through fog for GM and players alike. Fixing it means hiding
-  pins whose cell is hidden, in `MapCanvas`.
+- Pins whose cell is hidden fade with the fog and stop taking clicks
+  (`MapCanvas`), so fog hides them for players and dims them for the GM.
+
+## Ping and Follow mode
+
+Ephemeral, never persisted, no undo: `ClientMessage.ping`/`followView`
+are re-broadcast verbatim to every socket on the session as
+`ServerMessage.ping`/`followView` (`session.rs`). In GM mode the editor
+gets a Ping button (click the map; shows for ~2s in every window, and
+switches the presentation to that location) and a Follow sub-toggle
+that sends the GM's view after each pan/zoom so the presentation
+glides to match. Once Follow is off the presentation keeps the last
+view and can be panned freely. The presentation also toggles
+fullscreen on `f` and lists recently watched projects on its landing
+page (localStorage).
 
 ## Running things for manual/browser testing
+
+```
+nix develop --command bash -c 'cargo run -p hexen-cli -- launch examples/demo/demo.hexen.yml'
+```
+
+`hexen launch` starts hexend and both trunk dev servers (ports via
+`--hexend-port`/`--editor-port`/`--presentation-port`), waits for them,
+and opens the editor and presentation already pointed at the project
+(`--no-browser` to skip). Ctrl+C, or any one of them exiting, stops
+them all. Separately:
 
 ```
 nix develop --command bash -c 'cd apps/hexend && cargo run'         # :4000

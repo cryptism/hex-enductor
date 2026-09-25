@@ -10,7 +10,7 @@
 use std::path::Path;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
-use axum::extract::{Query, State, WebSocketUpgrade};
+use axum::extract::{DefaultBodyLimit, Query, State, WebSocketUpgrade};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
@@ -22,11 +22,11 @@ use tower_http::cors::CorsLayer;
 
 use crate::image_size::read_image_size;
 use crate::pathutil::{resolve, resolve_cwd};
-use crate::pb::hexen::v1::{client_message, ClientMessage, ServerMessage};
+use crate::pb::hexen::v1::{client_message, server_message, ClientMessage, ServerMessage};
 use crate::router::{create_project, list_directory};
 use crate::session::{
-    add_socket, apply_and_broadcast, get_or_create_session, get_session, open_project_dirs, redo, remove_socket,
-    session_state, undo, Sessions,
+    add_socket, apply_and_broadcast, broadcast_follow_view, broadcast_ping, get_or_create_session, get_session,
+    open_project_dirs, redo, remove_socket, session_state, undo, Sessions,
 };
 
 #[derive(Clone)]
@@ -34,10 +34,20 @@ pub struct AppState {
     pub sessions: Sessions,
 }
 
+// Map images can comfortably exceed axum's 2MB default body-size cap;
+// this is the layer that was missing, causing "Payload too large" on
+// upload of any map bigger than that.
+const MAX_IMAGE_UPLOAD_BYTES: usize = 50 * 1024 * 1024;
+
 pub fn app(sessions: Sessions) -> Router {
     Router::new()
         .route("/", get(root))
-        .route("/image", get(get_image).post(post_image))
+        .route(
+            "/image",
+            get(get_image)
+                .post(post_image)
+                .layer(DefaultBodyLimit::max(MAX_IMAGE_UPLOAD_BYTES)),
+        )
         .route("/project", post(create_project))
         .route("/directory", get(list_directory))
         .route("/ws", get(ws_handler))
@@ -122,7 +132,7 @@ async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppSt
     let initial = {
         let guard = session.lock().await;
         ServerMessage {
-            state: Some(session_state(&guard)),
+            kind: Some(server_message::Kind::State(session_state(&guard))),
         }
     };
     let text = serde_json::to_string(&initial).expect("ServerMessage always serializes");
@@ -166,6 +176,8 @@ async fn handle_socket(mut socket: WebSocket, path: Option<String>, state: AppSt
                 }
                 Some(client_message::Kind::Undo(_)) => undo(&mut guard),
                 Some(client_message::Kind::Redo(_)) => redo(&mut guard),
+                Some(client_message::Kind::Ping(ping)) => broadcast_ping(&guard, ping),
+                Some(client_message::Kind::FollowView(view)) => broadcast_follow_view(&guard, view),
                 None => {}
             }
         }

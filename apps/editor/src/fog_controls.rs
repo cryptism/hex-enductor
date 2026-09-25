@@ -8,23 +8,15 @@ enum BlanketAction {
     Reveal,
 }
 
-/// GM mode's fog panel — a Krita-style layer toggle (peek under the fog
-/// without changing it) plus a status readout that stays truthful about
-/// what players see regardless of that peek, always available in GM
-/// mode. The paint tool and blanket apply/remove only appear once edit
-/// mode is also on, since they mutate the project.
+/// The truthful "what do players currently see" readout — kept apart
+/// from FogControls so it can sit high in the sidebar, right under the
+/// header: it's the one fog fact a GM needs at a glance, whatever the
+/// local layer peek is doing.
 #[component]
-pub fn FogControls(
+pub fn FogStatusLine(
     #[prop(into)] image: Signal<ImageRef>,
     #[prop(into)] fog: Signal<Option<FogOfWar>>,
-    #[prop(into)] edit_mode: Signal<bool>,
-    layer_visible: RwSignal<bool>,
-    #[prop(into)] painting_fog: Signal<bool>,
-    on_set_painting_fog: Callback<bool>,
-    on_set_fog: Callback<Option<FogOfWar>>,
 ) -> impl IntoView {
-    let pending = RwSignal::new(None::<BlanketAction>);
-
     let status = move || {
         let (w, h) = image.with(|i| (i.width as f64, i.height as f64));
         let dims = fog_grid_dims(w, h);
@@ -37,10 +29,26 @@ pub fn FogControls(
             None => "Fog is off — players see the full map.".into(),
         })
     };
+    view! { <p class="fog-status fog-status-prominent">{status}</p> }
+}
+
+/// GM mode's fog panel — a Krita-style layer toggle (peek under the fog
+/// without changing it), plus the paint tool and blanket apply/remove,
+/// which only appear once edit mode is also on since they mutate the
+/// project. The status readout is FogStatusLine, shown separately.
+#[component]
+pub fn FogControls(
+    #[prop(into)] fog: Signal<Option<FogOfWar>>,
+    #[prop(into)] edit_mode: Signal<bool>,
+    layer_visible: RwSignal<bool>,
+    #[prop(into)] painting_fog: Signal<bool>,
+    on_set_painting_fog: Callback<bool>,
+    on_set_fog: Callback<Option<FogOfWar>>,
+) -> impl IntoView {
+    let pending = RwSignal::new(None::<BlanketAction>);
 
     view! {
         <div class="fog-controls">
-            <p class="fog-status">{status}</p>
 
             <label class="grid-toggle fog-layer-toggle">
                 <input type="checkbox" bind:checked=layer_visible />

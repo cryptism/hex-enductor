@@ -1,7 +1,8 @@
-//! The map: base image, terrain grid, link pins, fog of war, plus the
-//! editor's two map tools (click-to-place and fog painting) — the port
-//! of packages/map-core's `MapCanvas.tsx`, with no map library
-//! underneath.
+//! The map: base image, terrain grid, link pins, fog of war, pings, plus
+//! the editor's map tools (click-to-place, fog painting, the Ping tool)
+//! and both halves of Follow mode (reporting this view; following
+//! someone else's) — the port of packages/map-core's `MapCanvas.tsx`,
+//! with no map library underneath.
 //!
 //! Everything in image space — the image, the grid, the fog — is one
 //! `<svg>` whose content group is transformed by the current
@@ -23,6 +24,7 @@ use map_core::link_icons::find_link_icon;
 use map_core::square_math::build_square_polygons;
 use map_core::viewport::{wheel_zoom_delta, Viewport};
 use map_core::Point;
+use std::time::Duration;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::Clamped;
 
@@ -37,6 +39,34 @@ const FOG_OPACITY_ERASING: f64 = 0.35;
 /// (and broadcasts to every other viewer) as a handful of updates, not
 /// one per cell.
 const FOG_PAINT_FLUSH_MS: i32 = 80;
+
+/// How long a ping's radiating rings take, start to finish (three rings
+/// 0.35s apart, 1.3s each — see `.map-ping` in map.css). Callers clear
+/// `ping_at` no sooner than this, or the last ring cuts off.
+pub const PING_EFFECT_DURATION_MS: u64 = 2000;
+
+/// A ping to show. `key` must change even for a repeat ping at the same
+/// spot, so the animation restarts.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PingMark {
+    pub x: f64,
+    pub y: f64,
+    pub key: u64,
+}
+
+/// A map view for Follow mode: the image point at the centre, and the
+/// zoom level (see `Viewport`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MapView {
+    pub x: f64,
+    pub y: f64,
+    pub zoom: f64,
+}
+
+/// How long following a view takes to glide there.
+const FOLLOW_ANIMATION_MS: f64 = 300.0;
+/// A wheel/zoom-button gesture reports its view this long after it stops.
+const VIEW_REPORT_DEBOUNCE_MS: u64 = 150;
 /// A pointer that moves less than this between down and up is a click
 /// (closes the open popup), not a pan.
 const CLICK_SLOP_PX: f64 = 4.0;
@@ -209,6 +239,19 @@ pub fn MapCanvas(
     /// `(cells, revealed)` — one call per flushed batch of a stroke.
     #[prop(optional, into)]
     on_paint_fog_cells: Option<Callback<(Vec<String>, bool)>>,
+    /// The Ping tool: while true, a click on the map calls `on_ping` with the image point.
+    #[prop(into, default = false.into())]
+    pinging: Signal<bool>,
+    #[prop(optional, into)] on_ping: Option<Callback<Point>>,
+    /// A ping to show; the caller clears it after `PING_EFFECT_DURATION_MS`.
+    #[prop(into, default = Signal::stored(None))]
+    ping_at: Signal<Option<PingMark>>,
+    /// Follow mode, leading side: called with this map's view after every pan/zoom.
+    #[prop(optional, into)]
+    on_view_change: Option<Callback<MapView>>,
+    /// Follow mode, following side: glides to this view whenever it changes.
+    #[prop(into, default = Signal::stored(None))]
+    follow_view: Signal<Option<MapView>>,
 ) -> impl IntoView {
     let container = NodeRef::<Div>::new();
     let viewport = RwSignal::new(Viewport::default());
@@ -282,6 +325,32 @@ pub fn MapCanvas(
             .get_untracked()
             .map(|el| el.get_bounding_client_rect())
     };
+    let report_view = move || {
+        let (Some(on_view_change), Some(rect)) = (on_view_change, container_rect()) else {
+            return;
+        };
+        let v = viewport.get_untracked();
+        let c = v.center(rect.width(), rect.height());
+        on_view_change.run(MapView {
+            x: c.x,
+            y: c.y,
+            zoom: v.zoom,
+        });
+    };
+    let report_timer = StoredValue::new_local(None::<TimeoutHandle>);
+    let report_view_soon = move || {
+        if on_view_change.is_none() {
+            return;
+        }
+        if let Some(Some(timer)) = report_timer.try_update_value(Option::take) {
+            timer.clear();
+        }
+        let timer =
+            set_timeout_with_handle(report_view, Duration::from_millis(VIEW_REPORT_DEBOUNCE_MS))
+                .ok();
+        report_timer.set_value(timer);
+    };
+
     let local_point = move |client_x: i32, client_y: i32| -> Point {
         let (left, top) = container_rect().map_or((0.0, 0.0), |r| (r.left(), r.top()));
         Point {
@@ -330,6 +399,7 @@ pub fn MapCanvas(
                 };
                 let anchor = local_point(e.client_x(), e.client_y());
                 viewport.update(|v| *v = v.zoom_around(&anchor, v.zoom + wheel_zoom_delta(px)));
+                report_view_soon();
             });
         let options = web_sys::AddEventListenerOptions::new();
         options.set_passive(false);
@@ -356,8 +426,36 @@ pub fn MapCanvas(
         listeners.set_value(Some((el, on_wheel, on_resize)));
     });
 
+    // Follow mode, following side: glide from wherever this map is to the
+    // followed view. A newer target supersedes an animation in flight.
+    let animation = StoredValue::new(0u64);
+    Effect::new(move |_| {
+        let Some(target) = follow_view.get() else {
+            return;
+        };
+        let Some(rect) = container.get().map(|el| el.get_bounding_client_rect()) else {
+            return;
+        };
+        let (w, h) = (rect.width(), rect.height());
+        let from = viewport.get_untracked();
+        animation.update_value(|n| *n += 1);
+        animate_to(
+            viewport,
+            animation,
+            animation.get_value(),
+            js_sys::Date::now(),
+            from.center(w, h),
+            from.zoom,
+            target,
+            (w, h),
+        );
+    });
+
     on_cleanup(move || {
         end_stroke();
+        if let Some(Some(timer)) = report_timer.try_update_value(Option::take) {
+            timer.clear();
+        }
         detach_keys();
         if let Some((el, on_wheel, on_resize)) = listeners.try_update_value(Option::take).flatten()
         {
@@ -467,9 +565,20 @@ pub fn MapCanvas(
         if clicked {
             // A plain click on the map closes the open popup, as Leaflet did.
             open_popup.set(None);
-            if let (true, Some(on_place)) = (placing.get_untracked(), on_place) {
-                on_place.run(viewport.with_untracked(|v| v.to_image(&p)));
+            let at = viewport.with_untracked(|v| v.to_image(&p));
+            match (
+                placing.get_untracked(),
+                on_place,
+                pinging.get_untracked(),
+                on_ping,
+            ) {
+                (true, Some(on_place), _, _) => on_place.run(at),
+                (_, _, true, Some(on_ping)) => on_ping.run(at),
+                _ => {}
             }
+        } else if gesture.with_value(|g| g.pointers.is_empty()) {
+            // A pan or pinch just ended.
+            report_view();
         }
     };
 
@@ -480,6 +589,7 @@ pub fn MapCanvas(
             y: rect.height() / 2.0,
         };
         viewport.update(|v| *v = v.zoom_around(&centre, v.zoom + delta));
+        report_view_soon();
     };
 
     let transform = move || {
@@ -521,6 +631,28 @@ pub fn MapCanvas(
             })
         })
     });
+    // Pins under fog are covered by it, as the fog layer's own opacity
+    // would cover them if they were drawn beneath it — and can't be
+    // clicked, so a player can't find a hidden pin by feel.
+    let hidden_cells = Memo::new(move |_| {
+        image.with(|i| {
+            fog.with(|f| {
+                f.as_ref().map(|f| {
+                    hidden_fog_cells(i.width as f64, i.height as f64, &f.revealed_cells)
+                        .into_iter()
+                        .collect::<std::collections::HashSet<_>>()
+                })
+            })
+        })
+    });
+    let fog_opacity = move || {
+        if shift_held.get() {
+            FOG_OPACITY_ERASING
+        } else {
+            FOG_OPACITY
+        }
+    };
+
     let visible_links = Memo::new(move |_| {
         links.with(|links| {
             links
@@ -544,11 +676,23 @@ pub fn MapCanvas(
             x: link.x,
             y: link.y,
         };
+        let cell = (
+            (position.x / FOG_CELL_SIZE).floor() as i64,
+            (position.y / FOG_CELL_SIZE).floor() as i64,
+        );
+        let fogged = Memo::new(move |_| {
+            hidden_cells.with(|h| h.as_ref().is_some_and(|h| h.contains(&cell)))
+        });
         let style = move || {
             let s = viewport.with(|v| v.to_screen(&position));
             let size = size();
+            let under_fog = if fogged.get() {
+                format!(" opacity: {}; pointer-events: none;", 1.0 - fog_opacity())
+            } else {
+                String::new()
+            };
             format!(
-                "left: {}px; top: {}px; width: {size}px; height: {size}px; border-color: {color};",
+                "left: {}px; top: {}px; width: {size}px; height: {size}px; border-color: {color};{under_fog}",
                 s.x, s.y
             )
         };
@@ -606,7 +750,7 @@ pub fn MapCanvas(
             class=move || {
                 if painting.get() {
                     "map-canvas painting-fog"
-                } else if placing.get() {
+                } else if placing.get() || pinging.get() {
                     "map-canvas placing"
                 } else {
                     "map-canvas"
@@ -654,6 +798,25 @@ pub fn MapCanvas(
             // one doesn't.
             <For each=move || visible_links.get() key=|link| format!("{link:?}") children=pin_view />
             {popup}
+            {move || {
+                ping_at
+                    .get()
+                    .map(|mark| {
+                        let at = Point { x: mark.x, y: mark.y };
+                        let style = move || {
+                            let s = viewport.with(|v| v.to_screen(&at));
+                            format!("left: {}px; top: {}px;", s.x, s.y)
+                        };
+                        view! {
+                            <div class="map-ping" style=style>
+                                <span class="map-ping-dot"></span>
+                                <span class="map-ping-ring"></span>
+                                <span class="map-ping-ring"></span>
+                                <span class="map-ping-ring"></span>
+                            </div>
+                        }
+                    })
+            }}
             <div class="map-zoom">
                 <button type="button" title="Zoom in" on:click=move |_| zoom_by(1.0)>
                     "+"
@@ -663,6 +826,56 @@ pub fn MapCanvas(
                 </button>
             </div>
         </div>
+    }
+}
+
+/// One animation frame of Follow mode's glide: eases the centre point
+/// and zoom from where the map was to `target`, then schedules the next
+/// frame — unless a newer target has started its own glide.
+#[allow(clippy::too_many_arguments)]
+fn animate_to(
+    viewport: RwSignal<Viewport>,
+    animation: StoredValue<u64>,
+    generation: u64,
+    start: f64,
+    from_center: Point,
+    from_zoom: f64,
+    target: MapView,
+    (w, h): (f64, f64),
+) {
+    if animation.try_get_value() != Some(generation) {
+        return;
+    }
+    let t = ((js_sys::Date::now() - start) / FOLLOW_ANIMATION_MS).clamp(0.0, 1.0);
+    let eased = if t < 0.5 {
+        2.0 * t * t
+    } else {
+        1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
+    };
+    let lerp = |a: f64, b: f64| a + (b - a) * eased;
+    let center = Point {
+        x: lerp(from_center.x, target.x),
+        y: lerp(from_center.y, target.y),
+    };
+    viewport.set(Viewport::centered_on(
+        &center,
+        lerp(from_zoom, target.zoom),
+        w,
+        h,
+    ));
+    if t < 1.0 {
+        request_animation_frame(move || {
+            animate_to(
+                viewport,
+                animation,
+                generation,
+                start,
+                from_center,
+                from_zoom,
+                target,
+                (w, h),
+            )
+        });
     }
 }
 

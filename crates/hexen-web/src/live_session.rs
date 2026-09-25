@@ -6,11 +6,16 @@
 //! conversion step to keep in sync. A client never applies its own
 //! command locally; it sends it and waits to be told what happened.
 //!
+//! Pings and follow-view updates are the exception: purely ephemeral,
+//! never touching project state — hexend re-broadcasts each verbatim to
+//! every socket on the session, sender included.
+//!
 //! A read-only consumer (the presentation app) is this same type, just
-//! never calling `execute`/`undo`/`redo`.
+//! never sending anything.
 
 use hexen_proto::hexen::v1::{
-    client_message, ClientMessage, Command, OpenedProjectData, Redo, ServerMessage, Undo,
+    client_message, server_message, ClientMessage, Command, FollowView, OpenedProjectData, Ping,
+    Redo, ServerMessage, Undo,
 };
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
@@ -34,6 +39,26 @@ impl LiveSession {
 
     pub fn redo(&self) {
         self.send(client_message::Kind::Redo(Redo {}));
+    }
+
+    /// "Look here", at an image-pixel point on a location's map.
+    pub fn ping(&self, location_id: &str, x: f64, y: f64) {
+        self.send(client_message::Kind::Ping(Ping {
+            location_id: location_id.to_owned(),
+            x,
+            y,
+        }));
+    }
+
+    /// The sender's current view (centre in image pixels, zoom level),
+    /// for Follow mode.
+    pub fn follow_view(&self, location_id: &str, x: f64, y: f64, zoom: f64) {
+        self.send(client_message::Kind::FollowView(FollowView {
+            location_id: location_id.to_owned(),
+            x,
+            y,
+            zoom,
+        }));
     }
 
     fn send(&self, kind: client_message::Kind) {
@@ -61,15 +86,23 @@ fn ws_url(server_url: &str, path: &str) -> String {
     format!("{base}/ws?path={}", js_sys::encode_uri_component(path))
 }
 
-/// Calls `on_state` with every state hexend sends, starting with the
-/// handshake. `on_error` fires at most once, and only if the connection
-/// fails or closes before that first state — same contract as the TS
-/// client's rejected promise; after that, a dropped connection just
-/// stops the updates.
+/// Something hexend sent.
+#[derive(Debug, Clone)]
+pub enum Event {
+    /// The project's state — the handshake, then after every command.
+    State(OpenedProjectData),
+    Ping(Ping),
+    FollowView(FollowView),
+}
+
+/// Calls `on_event` with everything hexend sends, starting with the
+/// handshake state. `on_error` fires at most once, and only if the
+/// connection fails or closes before that first state; after that, a
+/// dropped connection just stops the updates.
 pub fn connect(
     server_url: &str,
     path: &str,
-    on_state: impl Fn(OpenedProjectData) + 'static,
+    on_event: impl Fn(Event) + 'static,
     on_error: impl Fn(String) + 'static,
 ) -> Result<LiveSession, String> {
     let socket = WebSocket::new(&ws_url(server_url, path)).map_err(|e| format!("{e:?}"))?;
@@ -81,11 +114,19 @@ pub fn connect(
             let Some(text) = evt.data().as_string() else {
                 return;
             };
-            let Ok(ServerMessage { state: Some(state) }) = serde_json::from_str(&text) else {
+            let Ok(ServerMessage { kind: Some(kind) }) = serde_json::from_str(&text) else {
                 return;
             };
-            opened.set(true);
-            on_state(state);
+            match kind {
+                server_message::Kind::State(state) => {
+                    opened.set(true);
+                    on_event(Event::State(state));
+                }
+                // Only meaningful once there's a state to show them against.
+                _ if !opened.get() => {}
+                server_message::Kind::Ping(ping) => on_event(Event::Ping(ping)),
+                server_message::Kind::FollowView(view) => on_event(Event::FollowView(view)),
+            }
         })
     };
 
